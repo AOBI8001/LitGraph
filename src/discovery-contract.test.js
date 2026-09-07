@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {discoveryCount,planningMessages,normalizePlan,analysisMessages,applyAssessments,matchesDiscovery} from './discovery-contract.js';
+assert.equal(discoveryCount('200'),200);for(const v of [0,1001,1.5,'oops'])assert.throws(()=>discoveryCount(v));
+assert.match(planningMessages('test',{},'en')[0].content,/NOT you/);
+assert.deepEqual(normalizePlan({queries:['test','test','other'],summary:'strategy'},'q').queries,['test','other']);
+const p={recordId:'real',title:'Source title',authors:['A','B'],year:2021,language:'en',articleType:'research',sourceUrl:'https://example.org/p',isOpenAccess:true,citations:null};
+const f={yearStart:2020,yearEnd:2026,language:'en',articleType:'any',source:'open'};
+assert.ok(matchesDiscovery(p,f));assert.ok(!matchesDiscovery({...p,language:'unknown'},f));assert.ok(!matchesDiscovery({...p,title:'中文',language:'en'},f));assert.ok(!matchesDiscovery({...p,isOpenAccess:false},f));
+assert.match(analysisMessages('q',[p],'en')[0].content,/Never alter/);
+const assessed=applyAssessments([p],{assessments:[{id:'real',score:80,reason:'Relevant sample',title:'Invented title',citations:999}]});assert.equal(assessed[0].title,p.title);assert.equal(assessed[0].citations,null);
+assert.throws(()=>applyAssessments([p],{assessments:[{id:'invented',score:80,reason:'bad'}]}));
+console.log('Discovery pipeline contract: counts, strict language/access filtering, model-independent planning, immutable metadata passed.');

@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import { withImages } from './fulltext.js';
+const input = [{ role: 'system', content: 'Rules' }, { role: 'user', content: 'Question' }];
+const image = 'data:image/png;base64,YWJj';
+assert.equal(withImages(input, [image], 'openai-chat')[1].content[1].image_url.url, image);
+assert.equal(withImages(input, [image], 'openai-responses')[1].content[1].type, 'input_image');
+assert.deepEqual(withImages(input, [image], 'anthropic-messages')[1].content[1].source, { type: 'base64', media_type: 'image/png', data: 'YWJj' });
+assert.equal(input[1].content, 'Question');
+assert.deepEqual(withImages(input, [], 'openai-chat'), input);
+console.log('Image request formats: Chat, Responses, Anthropic; original messages preserved.');

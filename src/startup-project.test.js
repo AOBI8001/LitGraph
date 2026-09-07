@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import { initialWorkspace } from './startup-project.js';
+import sample from './public-sample.js';
+const fresh=initialWorkspace({},null,sample);
+assert.equal(fresh.project.nodes.length,0);
+assert.notEqual(fresh.activeId,'sample-project');
+assert.equal(fresh.library['sample-project'].data.nodes.length,50);
+const custom={meta:{id:'custom',title:'My project'},nodes:[{id:'mine'}]};
+const existing=initialWorkspace({custom:{data:custom}},'custom',sample);
+assert.equal(existing.project,custom);
+assert.equal(initialWorkspace({},null,sample,'en').project.meta.title,'Untitled literature project');
+assert.equal(initialWorkspace({},'missing',sample).project.nodes.length,0);
+console.log('Fresh installs start blank; existing projects are preserved.');

@@ -1,0 +1,25 @@
+{
+  "name": "litgraph",
+  "version": "0.2.0",
+  "license": "MIT",
+  "engines": { "node": ">=22.12.0" },
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 4320",
+    "build": "vite build",
+    "test": "node --test src/*.test.js scripts/*.test.js",
+    "check:release": "node scripts/check-release.mjs",
+    "preview": "vite preview --host 127.0.0.1 --port 4320"
+  },
+  "dependencies": {
+    "3d-force-graph": "^1.80.0",
+    "d3": "7.9.0",
+    "pdfjs-dist": "^6.3.289",
+    "three": "^0.185.0",
+    "three-spritetext": "^1.10.0"
+  },
+  "devDependencies": {
+    "vite": "7.1.7"
+  }
+}

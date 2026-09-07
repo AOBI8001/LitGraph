@@ -1,0 +1,65 @@
+async (page) => {
+await page.evaluate(()=>{if(window.__backupStorage){localStorage.clear();Object.entries(window.__backupStorage).forEach(([k,v])=>localStorage.setItem(k,v));}});
+await page.reload();
+await page.setViewportSize({width:1329,height:958});
+await page.evaluate(() => { window.__backupStorage = {...localStorage}; window.__copyText = ''; navigator.clipboard.writeText = async text => { window.__copyText = text; }; });
+await page.getByRole('button',{name:'设置',exact:true}).click();
+await page.locator('[data-workspace-action="api"]').click();
+await page.getByRole('button',{name:'复制文本',exact:true}).click();
+await page.waitForFunction(() => window.__copyText?.includes('若 MCP'));
+const config = await page.evaluate(() => { const text = window.__copyText; const start = text.indexOf('{\n'); return JSON.parse(text.slice(start,text.indexOf('\n若 MCP',start))); });
+if (!config.args[0].includes('litgraph-mcp.mjs')) throw new Error('copy missing adapter path');
+const url = config.args[1], token = config.args[2];
+const tool = async (name,args={}) => { const r = await page.request.post(url+'/__litgraph/agent',{headers:{Authorization:'Bearer '+token},data:{name,arguments:args}}); const data=await r.json(); if (!r.ok()) throw new Error(JSON.stringify(data)); return data; };
+await tool('litgraph_connect',{model:'External QA (simulated)',vision:false});
+await page.waitForTimeout(3300);
+if ((await page.locator('#model-badge-label').innerText()) !== 'External QA (simulated)') throw new Error('badge not updated');
+await page.screenshot({path:'output/playwright/agent-settings.png'});
+await page.locator('#api-modal [data-close-modal]').first().click();
+await page.getByRole('button',{name:'研究空间',exact:true}).click();
+await page.locator('#deep-read-input').fill('Compare inhibition results and methods.');
+await page.locator('#deep-read-input').press('Enter');
+let job;
+for (let i=0;i<8;i++) { job=await tool('litgraph_next_task',{wait_ms:5000}); if(job.id)break; }
+if (!job.id) throw new Error('No website task');
+const payload=JSON.parse(job.messages[1].content);
+if(payload.evidence_level!=='retrieved_source_excerpts') throw new Error('fulltext not retrieved');
+if(!payload.evidence.some(e=>e.sourceKind==='extracted_text' && e.lineStart && e.text.length>40))throw new Error('Missing original provenance');
+if(!['quick','expert'].includes(payload.response_mode))throw new Error('Agent mode instruction missing');
+await tool('litgraph_submit_result',{id:job.id,result:JSON.stringify({answer:'原文链路测试：已读取所提供的论文原文片段。这是一条模拟回传，不是实际学术分析。',suggested_followups:['该研究如何测量抑制控制？','结果有哪些统计限制？','样本与其他论文有何差别？']})});
+await page.getByText('原文链路测试：已读取所提供的论文原文片段。这是一条模拟回传，不是实际学术分析。',{exact:true}).waitFor();
+if(await page.locator('.research-sources').count())throw new Error('Unexpected default source card');
+await page.screenshot({path:'output/playwright/research-agent-mode-verified.png'});
+await page.locator('.research-file-input').setInputFiles('docs/LITGRAPH_AGENT_GUIDE.md');
+await page.locator('[data-remove-attachment]').waitFor();
+await page.locator('.research-file-input').setInputFiles('src/assets/brand/litgraph-mark.png');
+await page.locator('.research-notice-dialog').waitFor();
+if(!(await page.locator('.research-notice-dialog').innerText()).includes('图片'))throw new Error('image warning missing');
+await page.locator('.research-notice-dialog .primary').click();
+await page.locator('#deep-read-input').fill('暂停测试'); await page.locator('#deep-read-input').press('Enter');
+let pausedJob;
+for (let i=0;i<8;i++){pausedJob=await tool('litgraph_next_task',{wait_ms:2000});if(pausedJob.id)break;}
+await page.locator('.research-send[data-mode="pause"]').click();
+await page.locator('.research-send[data-mode="resume"]').waitFor();
+await page.waitForTimeout(900);
+const late=await page.request.post(url+'/__litgraph/agent',{headers:{Authorization:'Bearer '+token},data:{name:'litgraph_submit_result',arguments:{id:pausedJob.id,result:'late'}}});
+if(late.ok())throw new Error('cancelled result accepted');
+await page.getByRole('button',{name:'文献发现 AI',exact:true}).click();
+await page.locator('#discovery-window-query').fill('Integration test only; do not perform a real search');
+await page.locator('#start-discovery').click();
+const discoveryJob = await tool('litgraph_next_task',{wait_ms:5000});
+if(!discoveryJob.id || !discoveryJob.messages[0].content.includes('scholarly discovery'))throw new Error('Discovery not routed to agent');
+await tool('litgraph_submit_result',{id:discoveryJob.id,result:JSON.stringify({status:'ok',search_summary:'接口测试，不是真实检索',papers:[{title:'Integration fixture — not a publication',authors:['Test Fixture'],year:2024,doi:'',journal:'',language:'en',article_type:'research',abstract:'Fixture only',citations:null,is_open_access:true,source_url:'https://example.org/litgraph-test',pdf_url:'',relevance_reason:'测试回传'}]})});
+await page.getByText('Integration fixture — not a publication',{exact:true}).waitFor();
+const footerAligned=await page.locator('.discovery-results-footer > div').evaluate(el=>{
+  const [a,b]=[...el.children].map(n=>n.getBoundingClientRect());
+  return Math.abs(a.y-b.y)<1 && Math.abs(a.height-b.height)<1 && b.left>=a.right;
+});
+if(!footerAligned)throw new Error('Discovery footer buttons misaligned');
+await page.screenshot({path:'output/playwright/discovery-results-footer-aligned.png'});
+await tool('litgraph_disconnect');
+console.log(JSON.stringify({verified:'copied config, handshake, model badge, Enter, real sample MD retrieval, mode guidance, source-free response, file attachment, image warning, pause/late rejection',evidenceChunks:payload.evidence.length,fulltextPapers:payload.coverage.filter(c=>c.status.startsWith('fulltext')).length}));
+await page.evaluate(()=>{localStorage.clear();Object.entries(window.__backupStorage).forEach(([key,value])=>localStorage.setItem(key,value));});
+await page.reload();
+return {verified:'config, handshake, model badge, research AND discovery roundtrip, mode guidance, optional citations, attachments, image guard, cancellation',evidenceChunks:payload.evidence.length,fulltextPapers:payload.coverage.filter(c=>c.status.startsWith('fulltext')).length};
+}

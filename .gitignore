@@ -1,0 +1,18 @@
+node_modules/
+dist/
+output/
+*.log
+.DS_Store
+# Private libraries, full text, credentials and local process artifacts.
+projects/
+versions/
+.playwright-cli/
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+Thumbs.db
+# Draft introductions are intentionally not part of this initial source push.
+/README*.md

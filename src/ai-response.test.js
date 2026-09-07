@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import { extractAIText, readAIResponse, researchTokenBudget } from './ai-response.js';
+const response = (content, finish_reason = 'stop', extra = {}) => ({ choices: [{ finish_reason, message: { content, ...extra } }] });
+assert.equal(extractAIText(response('final answer', 'stop', { reasoning_content: 'private reasoning' })), 'final answer');
+assert.equal(extractAIText(response([{ type: 'text', text: 'one' }, { type: 'text', text: 'two' }])), 'one\ntwo');
+assert.throws(() => extractAIText(response('', 'length', { reasoning_content: 'private reasoning' })), { code: 'output_limit' });
+assert.throws(() => extractAIText(response('partial JSON', 'length')), { code: 'output_limit' });
+assert.throws(() => extractAIText(response('', 'stop', { reasoning_content: 'private reasoning' })), { code: 'reasoning_only' });
+assert.throws(() => extractAIText(response('')), { code: 'empty_answer' });
+assert.throws(() => extractAIText(response('', 'content_filter')), { code: 'refusal' });
+assert.equal(extractAIText({ content: [{ type: 'thinking', thinking: 'private' }, { type: 'text', text: 'answer' }] }, 'anthropic-messages'), 'answer');
+assert.equal(extractAIText({ output: [{ content: [{ type: 'output_text', text: 'answer' }] }] }, 'openai-responses'), 'answer');
+await assert.rejects(() => readAIResponse(new Response('<html>gateway</html>'), 'openai-chat'), { code: 'invalid_json' });
+await assert.rejects(() => readAIResponse(new Response(JSON.stringify({ error: { message: 'Rate limit' } }), { status: 429 })), /Rate limit/);
+assert.equal(researchTokenBudget({ model: 'deepseek-v4-pro' }), 16384);
+assert.equal(researchTokenBudget({ provider: 'custom' }), 8192);
+console.log('AI response: reasoning/final separation, truncation, content blocks, protocols, HTTP/JSON errors and DeepSeek budget passed.');

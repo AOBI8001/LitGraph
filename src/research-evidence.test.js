@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import { chunkDocument, selectEvidence, validateEvidenceAnswer } from './research-evidence.js';
+const document = { fileName: 'paper.md', sourceKind: 'pdf_text', markdown: '# Paper\n\n## PDF Page 1\n\nIntroduction\n## PDF Page 2\n\nResults: inhibition improved.' };
+const chunks = chunkDocument(document);
+const result = chunks.find(c => c.text.includes('Results:'));
+assert.equal(result.page, 2); assert.equal(result.lineStart, 6); assert.equal(result.lineEnd, 8);
+const evidence = selectEvidence([{ node: { id: 'a', title: 'Paper' }, document }, { node: { id: 'b', title: 'Abstract paper', abstract: 'Abstract only' } }], 'inhibition results');
+assert.equal(evidence[0].page, 2);
+assert.equal(evidence[1].sourceKind, 'abstract');
+assert.equal(validateEvidenceAnswer('Result [E1]', evidence).length, 1);
+assert.throws(() => validateEvidenceAnswer('Result [E999]', evidence));
+assert.deepEqual(validateEvidenceAnswer('Source-grounded result without visible citations. 【AI 推断】Possible explanation.', evidence), []);
+assert.deepEqual(validateEvidenceAnswer('No evidence', []), []);
+console.log('Evidence: retrieval, page/line provenance, mixed coverage, optional citations and invalid ID rejection passed.');

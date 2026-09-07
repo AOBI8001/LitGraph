@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {scholarlyService,fromOpenAlex,fromCrossref,mergeMetadata} from './scholarly-service.js';
+import {publicAddress,publicFetch} from './public-fetch.js';
+for(const ip of ['127.0.0.1','10.1.0.2','169.254.169.254','172.20.1.1','192.168.1.1','::1','::ffff:127.0.0.1','fc00::1'])assert.equal(publicAddress(ip),false);
+assert.ok(publicAddress('8.8.8.8'));await assert.rejects(()=>publicFetch('https://127.0.0.1/x'));await assert.rejects(()=>publicFetch('http://example.org'));
+const fixture=i=>({id:`https://openalex.org/W${i}`,doi:`https://doi.org/10.1234/${i}`,title:`Test ${i}`,publication_year:2024,authorships:[{author:{display_name:'A'}},{author:{display_name:'B'}}],language:'en',type:'article',open_access:{is_oa:true},best_oa_location:{is_oa:true,pdf_url:'https://example.org/p.pdf'},primary_location:{landing_page_url:'https://example.org/p'},referenced_works:['https://openalex.org/W9'],abstract_inverted_index:{Source:[0],abstract:[1]},cited_by_count:i===1?0:undefined});
+const a=fromOpenAlex(fixture(1)),b=fromOpenAlex(fixture(2));assert.equal(a.citations,0);assert.equal(b.citations,null);assert.equal(a.abstract,'Source abstract');assert.equal(a.authors.length,2);
+const c=fromCrossref({DOI:'10.1234/1',title:['Test 1'],author:[{family:'A'}],published:{'date-parts':[[2024]]},reference:[{DOI:'10.1234/9'}],'is-referenced-by-count':999});
+assert.equal(mergeMetadata(a,c).citations,0);assert.deepEqual(mergeMetadata(a,c).referenceDois,['10.1234/9']);
+const filled=mergeMetadata(b,c);assert.equal(filled.citations,999);assert.equal(filled.citationSource,'Crossref');assert.equal(filled.citationRetrievedAt,c.citationRetrievedAt);
+let calls=0;
+const service=scholarlyService({json:async address=>{calls++;const url=new URL(address);assert.equal(url.hostname,'api.openalex.org');return {results:Array.from({length:200},(_,i)=>fixture(i+1+(url.searchParams.get('cursor')==='*'?0:200))),meta:{next_cursor:url.searchParams.get('cursor')==='*'?'next':null}};}});
+const f={yearStart:2020,yearEnd:2026,language:'en',articleType:'any',source:'open',resultCount:250,sort:'cited'};
+const result=await service.search({queries:['test'],filters:f});assert.equal(result.papers.length,250);assert.equal(calls,2);assert.equal(new Set(result.papers.map(p=>p.doi)).size,250);
+console.log('Scholarly sources: cursor pagination >200, provenance, complete authors, references, unknown counts and private-network rejection passed.');
