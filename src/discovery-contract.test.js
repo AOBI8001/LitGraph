@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
-import {discoveryCount,planningMessages,normalizePlan,analysisMessages,applyAssessments,matchesDiscovery} from './discovery-contract.js';
-assert.equal(discoveryCount('200'),200);for(const v of [0,1001,1.5,'oops'])assert.throws(()=>discoveryCount(v));
+import {COUNT_OPTIONS,discoveryCount,planningMessages,normalizePlan,analysisMessages,applyAssessments,matchesDiscovery} from './discovery-contract.js';
+assert.deepEqual(COUNT_OPTIONS,[5,10,20,50,100]);
+assert.equal(discoveryCount(),20);for(const n of [5,10,20,50,100])assert.equal(discoveryCount(String(n)),n);
+for(const v of [0,1,4,101,200,1001,5.5,'oops'])assert.throws(()=>discoveryCount(v));
 assert.match(planningMessages('test',{},'en')[0].content,/NOT you/);
 assert.deepEqual(normalizePlan({queries:['test','test','other'],summary:'strategy'},'q').queries,['test','other']);
 const p={recordId:'real',title:'Source title',authors:['A','B'],year:2021,language:'en',articleType:'research',sourceUrl:'https://example.org/p',isOpenAccess:true,citations:null};

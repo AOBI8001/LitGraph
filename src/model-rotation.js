@@ -18,6 +18,16 @@ export function mountModelRotation(graph, THREE, host, options) {
   const states = new Map();
   const raycaster = new THREE.Raycaster();
   let gesture = null;
+  let lastPointer = null;
+  // 3d-force-graph emits a synthetic touch pointerup with ID 0 after a node
+  // drag. OrbitControls now tracks real IDs; forwarding 0 leaves its mouse
+  // pointer registered and can enter an invalid one-touch state. Preserve the
+  // original pointer identity for that cleanup event (not for real gestures).
+  const repairPointerUp = event => {
+    if (event.isTrusted || event.pointerType !== 'touch' || event.pointerId !== 0 || !lastPointer || lastPointer.id === 0) return;
+    event.stopImmediatePropagation();
+    host.ownerDocument.dispatchEvent(new PointerEvent('pointerup', { pointerId: lastPointer.id, pointerType: lastPointer.type }));
+  };
   const scene = graph.scene(), previousBeforeRender = scene.onBeforeRender;
   function holdCamera() {
     if (!gesture) return;
@@ -60,6 +70,7 @@ export function mountModelRotation(graph, THREE, host, options) {
     });
   }
   const down = event => {
+    lastPointer = { id: event.pointerId, type: event.pointerType };
     if ((event.button !== 0 && !(timeline() && event.button === 2)) || !options.enabled() || !root() || hitsNode(event)) return;
     const s = state();
     if (s.rotation.angleTo(new THREE.Quaternion()) < 1e-8) s.pivot.copy(modelCenter(graph.graphData().nodes, THREE));
@@ -129,11 +140,13 @@ export function mountModelRotation(graph, THREE, host, options) {
   host.addEventListener('pointercancel',finish,true);
   host.addEventListener('lostpointercapture',finish,true);
   host.addEventListener('contextmenu',contextMenu,true);
+  host.ownerDocument.addEventListener('pointerup',repairPointerUp,true);
   return { sync, reset() {states.delete(options.slot());sync();}, get pivot(){return state().pivot;}, get rotation(){return state().rotation;}, dispose(){
     if (scene.onBeforeRender === beforeRender) scene.onBeforeRender = previousBeforeRender;
     if (gesture) {graph.enableNavigationControls(gesture.controlsEnabled);gesture=null;}
     host.removeEventListener('pointerdown',down,true);host.removeEventListener('pointermove',move,true);
     host.removeEventListener('pointerup',finish,true);host.removeEventListener('pointercancel',finish,true);host.removeEventListener('lostpointercapture',finish,true);
     host.removeEventListener('contextmenu',contextMenu,true);
+    host.ownerDocument.removeEventListener('pointerup',repairPointerUp,true);
   }};
 }

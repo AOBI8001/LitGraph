@@ -14,5 +14,9 @@ versions/
 *.pem
 *.key
 Thumbs.db
-# Draft introductions are intentionally not part of this initial source push.
-/README*.md
+# Local deployment credentials and generated installers.
+.dev.vars*
+*.local.json
+.wrangler/
+release/
+artifacts/

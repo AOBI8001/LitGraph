@@ -1,6 +1,8 @@
 // Capture only the application's initial chrome. Never translate paper text,
 // project names, API responses, or user-authored conversations.
 const english = {
+  '发送基础使用统计': 'Send basic usage statistics',
+  '仅发送随机安装标识、事件编号、打开或使用事件及时间；不发送论文、对话或密钥。可随时关闭。': 'Sends only a random installation ID, event ID, launch or use event, and timestamp. No papers, conversations, or API keys. You can turn this off at any time.',
   '从示例开始探索': 'Explore a sample graph',
   '按研究主题查找论文': 'Search by research topic',
   '导入本地论文': 'Import local papers',

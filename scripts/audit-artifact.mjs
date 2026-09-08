@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
+const require = createRequire(import.meta.url);
+const builderRequire = createRequire(require.resolve('electron-builder'));
+const asar = createRequire(builderRequire.resolve('app-builder-lib'))('@electron/asar');
+const archive = path.resolve(process.argv[2] || 'release/win-unpacked/resources/app.asar');
+const files = asar.listPackage(archive).map(file => file.replaceAll('\\', '/').replace(/^\//, ''));
+const required = ['desktop/main.mjs', 'desktop/preload.cjs', 'desktop/metrics.mjs', 'dist/index.html', 'scripts/local-service.js', 'scripts/litgraph-mcp.mjs', 'docs/LITGRAPH_AGENT_GUIDE.md', 'PRIVACY.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'dist/third-party-licenses/index.json'];
+for (const file of required) assert.ok(files.includes(file), 'Missing packaged file: ' + file);
+for (const file of files) assert.doesNotMatch(file, /(^|\/)(output|projects|tests|\.git|\.wrangler|node_modules)(\/|$)|\.local\.json$|\.env$|\.pem$|\.key$/, 'Private or unnecessary packaged path');
+const manifest = JSON.parse(asar.extractFile(archive, 'package.json').toString());
+assert.equal(manifest.version, '1.0.0');
+assert.equal(manifest.license, 'MIT');
+const contents = await readFile(archive);
+for (const value of ['TEST-ONLY-NOT-A-REAL-KEY', 'D:\\workbuddy\\', 'C:\\Users\\AOBI\\']) assert.ok(!contents.includes(Buffer.from(value)), 'Machine/test data included');
+const localSecrets = await readFile('output/metrics-admin.local.json', 'utf8').then(JSON.parse).catch(() => ({}));
+for (const value of Object.values(localSecrets)) if (typeof value === 'string' && value.length > 20) assert.ok(!contents.includes(Buffer.from(value)), 'Operator secret included');
+console.log(JSON.stringify({ passed: true, files: files.length, requiredFiles: required.length, version: manifest.version, privateDataExcluded: true }));

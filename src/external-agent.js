@@ -15,7 +15,8 @@ export async function externalInstructions(context, language = 'zh') {
   await localRequest('context', context);
   const data = await localRequest('instructions', {});
   state = { connected: false };
-  const config = { command: data.node, args: [data.script, data.url, data.token] };
+  const config = { command: data.node, args: [...(data.argsPrefix || [data.script]), data.url, data.token] };
+  if (data.env) config.env = data.env;
   if (language === 'en') return `Act as my external LitGraph agent and handle AI requests from the application.
 Current workspace folder: ${data.root}
 Current paper project: ${context.title}

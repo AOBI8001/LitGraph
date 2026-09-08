@@ -1,25 +1,74 @@
 {
   "name": "litgraph",
-  "version": "0.2.0",
+  "version": "1.0.0",
+  "description": "Local-first literature visualization and evidence-grounded research workspace",
+  "author": "LitGraph contributors",
+  "main": "desktop/main.mjs",
   "license": "MIT",
-  "engines": { "node": ">=22.12.0" },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 4320",
+    "desktop": "electron .",
+    "dist:win": "pnpm build && node scripts/prepare-desktop.mjs && electron-builder --win nsis --x64 --publish never",
+    "test:desktop": "node tests/desktop-smoke.mjs",
     "build": "vite build",
     "test": "node --test src/*.test.js scripts/*.test.js",
     "check:release": "node scripts/check-release.mjs",
     "preview": "vite preview --host 127.0.0.1 --port 4320"
   },
-  "dependencies": {
-    "3d-force-graph": "^1.80.0",
-    "d3": "7.9.0",
-    "pdfjs-dist": "^6.3.289",
-    "three": "^0.185.0",
-    "three-spritetext": "^1.10.0"
+  "build": {
+    "appId": "org.litgraph.desktop",
+    "productName": "LitGraph",
+    "asar": true,
+    "directories": {
+      "output": "release",
+      "buildResources": "output/build-resources"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "scripts/local-service.js",
+      "scripts/scholarly-service.js",
+      "scripts/public-fetch.js",
+      "scripts/litgraph-mcp.mjs",
+      "src/discovery-contract.js",
+      "docs/**/*.md",
+      "LICENSE",
+      "PRIVACY.md",
+      "THIRD_PARTY_NOTICES.md",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "signExecutable": false,
+      "icon": "output/build-resources/litgraph.ico",
+      "artifactName": "LitGraph-Setup-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "publish": null
   },
   "devDependencies": {
+    "3d-force-graph": "^1.80.0",
+    "d3": "7.9.0",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
+    "pdfjs-dist": "^6.3.289",
+    "playwright-core": "^1.63.0",
+    "png-to-ico": "^3.0.2",
+    "three": "^0.185.1",
+    "three-spritetext": "^1.10.0",
     "vite": "7.1.7"
   }
 }

@@ -38,7 +38,7 @@ window.__entryQA={initialFramingPoints,framePerspectiveModel,sample(){activatePr
     }
     await page.evaluate(()=>{const q=window.__entryQA;q.setRenderMode('2d');q.createBlankProject()});
     const rows=await page.locator('.empty-project-actions button').evaluateAll(buttons=>buttons.map(b=>{const r=b.getBoundingClientRect();return{x:r.x,y:r.y,width:r.width,height:r.height}}));
-    assert(rows.length===3&&rows.every(r=>Math.abs(r.x-rows[0].x)<1&&Math.abs(r.width-rows[0].width)<1)&&rows[1].y>rows[0].y+rows[0].height&&rows[2].y>rows[1].y+rows[1].height,'Rows not aligned');
+    assert(rows.length===4&&rows.every((r,i)=>Math.abs(r.x-rows[0].x)<1&&Math.abs(r.width-rows[0].width)<1&&(!i||r.y>rows[i-1].y+rows[i-1].height)),'Rows not aligned');
     await page.screenshot({path:'output/playwright/new-project-rows.png'});
     await page.evaluate(()=>window.__entryQA.openModal('api'));
     assert((await page.locator('#external-agent-label').innerText()).includes('Codex'),'Examples missing');

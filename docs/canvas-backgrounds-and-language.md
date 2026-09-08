@@ -1,6 +1,6 @@
 # Canvas, language and interaction
 
-Updated: 2026-09-08.
+LitGraph 1.0.
 
 ## Backgrounds
 

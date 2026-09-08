@@ -1,6 +1,7 @@
-export const COUNT_OPTIONS=[1,10,20,50,100,200];
-export const MAX_DISCOVERY_COUNT=1000;
-export function discoveryCount(value=20){const n=Number(value);if(!Number.isInteger(n)||n<1||n>MAX_DISCOVERY_COUNT)throw new Error('Result count must be an integer from 1 to 1000.');return n;}
+export const COUNT_OPTIONS=[5,10,20,50,100];
+export const MIN_DISCOVERY_COUNT=5;
+export const MAX_DISCOVERY_COUNT=100;
+export function discoveryCount(value=20){const n=Number(value);if(!Number.isInteger(n)||n<MIN_DISCOVERY_COUNT||n>MAX_DISCOVERY_COUNT)throw new Error('Search count must be an integer from 5 to 100.');return n;}
 export const cleanDoi=value=>String(value||'').trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,'').toLowerCase();
 export const titleKey=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
 export const paperKey=p=>cleanDoi(p.doi)||titleKey(p.title);

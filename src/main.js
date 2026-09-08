@@ -30,6 +30,7 @@ import { captureStaticUI } from './static-ui-language.js';
 import { localizedError } from './ui-errors.js';
 import { mountModelRotation } from './model-rotation.js';
 import { summaryForLanguage, summaryTranslationMessages } from './summary-language.js';
+import { desktop, desktopBootstrap, modelFetch, recordUse } from './desktop-bridge.js';
 
 const RELATION_LABELS = { support: '支持', oppose: '反对', related: '相关' };
 const EDGE_PALETTES = {
@@ -277,7 +278,7 @@ app.innerHTML = `
     </div>
     <div class="modal-backdrop" id="about-modal" hidden>
       <section class="settings-dialog about-dialog" role="dialog" aria-modal="true" aria-labelledby="about-dialog-title">
-        <header><div><h2 id="about-dialog-title">关于 LitGraph</h2><p>Version 0.2.0</p></div><button type="button" data-close-modal="about" aria-label="关闭">×</button></header>
+        <header><div><h2 id="about-dialog-title">关于 LitGraph</h2><p>Version 1.0</p></div><button type="button" data-close-modal="about" aria-label="关闭">×</button></header>
         <div class="about-content"><p><strong>开源许可：MIT</strong></p><p>LitGraph 是面向文献综述、理论比较与研究空白发现的本地论文可视化工作台。它把论文、观点、理论类别与关系放进一张可以直接操作的图谱。</p><p>项目开源、免费，允许学习、修改与再发布。如果它对你有帮助，欢迎前往 GitHub 点一个 Star。</p><a href="https://github.com/AOBI8001/LitGraph" target="_blank" rel="noreferrer">打开 GitHub 地址</a></div>
       </section>
     </div>
@@ -300,6 +301,10 @@ app.innerHTML = `
 `;
 
 app.querySelectorAll('svg').forEach((icon) => icon.setAttribute('aria-hidden', 'true'));
+if (desktop) {
+  document.querySelector('.about-content').insertAdjacentHTML('beforeend', `<label class="metrics-preference"><input id="metrics-enabled" type="checkbox" ${desktopBootstrap?.metricsEnabled ? 'checked' : ''}><span>发送基础使用统计</span></label><p class="metrics-description">仅发送随机安装标识、事件编号、打开或使用事件及时间；不发送论文、对话或密钥。可随时关闭。</p>`);
+  document.querySelector('#metrics-enabled').addEventListener('change', async event => { event.target.checked = await desktop.setMetricsEnabled(event.target.checked); });
+}
 const translateStaticUI = captureStaticUI(app);
 
 const workspace = document.querySelector('#graph-stage');
@@ -482,7 +487,7 @@ if (localStorage.getItem(UI_DENSITY_VERSION_KEY) !== UI_DENSITY_VERSION) {
   localStorage.setItem('litgraph.inspectorWidth', String(inspectorWidth));
   localStorage.setItem(UI_DENSITY_VERSION_KEY, UI_DENSITY_VERSION);
 }
-let aiConfig = JSON.parse(localStorage.getItem('litgraph.aiConfig') || 'null');
+let aiConfig = desktop ? desktopBootstrap?.config : JSON.parse(localStorage.getItem('litgraph.aiConfig') || 'null');
 let deepReadWindow = null;
 const researchRequests = new Map();
 const researchDrafts = new Map();
@@ -609,7 +614,7 @@ async function callAI(messages, config = aiConfig, maxTokens = 240, options = {}
     Object.assign(body, controls);
     if (controls.thinking?.type === 'enabled') delete body.temperature;
   }
-  const response = await fetch(url, {
+  const response = await modelFetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -1170,7 +1175,8 @@ function drawNodes() {
     }
     context.beginPath();
     context.arc(node.x, node.y, radius, 0, Math.PI * 2);
-    context.fillStyle = node.hasPdf ? nodeFill(node) : (canvasIsDark() ? '#596068' : '#cdd3da');
+    // Category colors are independent of whether an original PDF is stored locally.
+    context.fillStyle = nodeFill(node);
     context.fill();
     if (hovered) {
       context.strokeStyle = canvasIsDark() ? '#f5f7f8' : '#ffffff';
@@ -1514,7 +1520,7 @@ async function renderGraph3D(forceData = false) {
       .warmupTicks(60)
       .cooldownTicks(180)
       .nodeLabel(() => '')
-      .nodeColor((node) => node.hasPdf ? nodeFill(node) : '#7d858e')
+      .nodeColor(nodeFill)
       .nodeVal('val')
       .nodeRelSize(3.3)
       .nodeOpacity(0.94)
@@ -1538,6 +1544,7 @@ async function renderGraph3D(forceData = false) {
       .onNodeClick((node) => {
         const original = nodes.find((item) => item.id === node.id);
         if (!original) return;
+        recordUse('explore');
         if (interactionMode === 'multi') {
           if (selectedNodes.has(original.id)) selectedNodes.delete(original.id);
           else selectedNodes.add(original.id);
@@ -1574,7 +1581,7 @@ async function renderGraph3D(forceData = false) {
     .width(graph3dHost.getBoundingClientRect().width)
     .height(graph3dHost.getBoundingClientRect().height)
     .backgroundColor(currentBackground().color)
-    .nodeColor((node) => node.hasPdf ? nodeFill(node) : '#7d858e')
+    .nodeColor(nodeFill)
     .nodeThreeObject((node) => {
       if (!settings().paperLabels) return null;
       const label = new SpriteText(paperAuthorYearLabel(node, 36));
@@ -1895,7 +1902,9 @@ async function openPaper(node) {
   if (target) target.opener = null;
   const original = await originalBlob(node);
   if (original) {
-    const url = URL.createObjectURL(original);
+    // A supplied file MIME type must never turn an original into active HTML.
+    const pdf = (await original.slice(0, 5).text()) === '%PDF-';
+    const url = URL.createObjectURL(new Blob([original], { type: pdf ? 'application/pdf' : 'text/plain;charset=utf-8' }));
     if (target) target.location.replace(url); else { const a = document.createElement('a'); a.href = url; a.download = node.fileName || `${node.title}.pdf`; a.click(); }
     setTimeout(() => URL.revokeObjectURL(url), 120000);
     return;
@@ -2206,6 +2215,7 @@ function submitResearchQuestion(element, tab, chatKey) {
   const attachments = [...(researchAttachments.get(chatKey) || [])];
   if (attachments.some(a => a.image) && activeAIConfig().vision !== true) return showResearchNotice(panelText('当前模型未启用图片输入。请移除图片，或在模型接入中确认该模型支持图片后再发送。', 'Image input is not enabled. Remove the image, or confirm this model supports images in Model connection before sending.'));
   const requestedMode = normalizeResearchMode(element.querySelector('#research-response-mode').value);
+  recordUse('question');
   const buildMessages = async (signal, config, mode) => {
     const context = await prepareEvidence(scopedNodes, question, attachments, signal, researchModePolicy(mode).evidenceBudget);
     const textMessages = researchMessages(scopedNodes, priorMessages, question, context, mode);
@@ -2608,7 +2618,7 @@ function renderSecondaryPanel() {
       <p>${panelText('连接与应用', 'Connections & app')}</p>
       <button type="button" data-workspace-action="api"><span><strong>${panelText('模型接入', 'AI connection')}</strong><small>${panelText('配置模型、API 地址与密钥', 'Configure model, API URL and key')}</small></span></button>
       <a href="https://github.com/" target="_blank" rel="noreferrer"><span><strong>GitHub</strong><small>${panelText('查看项目地址', 'Open project repository')}</small></span></a>
-      <button type="button" data-workspace-action="about"><span><strong>${panelText('关于 LitGraph', 'About LitGraph')}</strong><small>Version 0.2.0</small></span></button>
+      <button type="button" data-workspace-action="about"><span><strong>${panelText('关于 LitGraph', 'About LitGraph')}</strong><small>Version 1.0</small></span></button>
     </div>`;
   } else if (activePanel === 'literature-discovery') {
     body = `<div class="discovery-panel">
@@ -3628,8 +3638,8 @@ function renderLiteratureDiscoveryWindow() {
         <div class="discovery-filter-row"><span class="discovery-filter-label"><i>□</i>${panelText('文献类型', 'Type')}</span><div class="discovery-choices">${discoveryOption(panelText('不限', 'Any'), 'articleType', 'any', discoveryFilters.articleType)}${discoveryOption(panelText('元分析', 'Meta-analysis'), 'articleType', 'meta', discoveryFilters.articleType)}${discoveryOption(panelText('综述', 'Review'), 'articleType', 'review', discoveryFilters.articleType)}${discoveryOption(panelText('研究', 'Research'), 'articleType', 'research', discoveryFilters.articleType)}${discoveryOption(panelText('会议', 'Conference'), 'articleType', 'conference', discoveryFilters.articleType)}</div></div>
         <div class="discovery-filter-row"><span class="discovery-filter-label"><i>≋</i>${panelText('数据来源', 'Sources')}</span><div class="discovery-choices">${discoveryOption(panelText('开放获取', 'Open access'), 'source', 'open', discoveryFilters.source)}${discoveryOption(panelText('机构登录', 'Institution sign-in'), 'source', 'institution', discoveryFilters.source)}</div></div>
         <div class="discovery-filter-row"><span class="discovery-filter-label"><i>↕</i>${panelText('排序方式', 'Sort')}</span><div class="discovery-choices">${discoveryOption(panelText('综合', 'Combined'), 'sort', 'combined', discoveryFilters.sort)}${discoveryOption(panelText('相关度', 'Relevance'), 'sort', 'relevance', discoveryFilters.sort)}${discoveryOption(panelText('最新', 'Newest'), 'sort', 'newest', discoveryFilters.sort)}${discoveryOption(panelText('被引量', 'Citations'), 'sort', 'cited', discoveryFilters.sort)}</div></div>
-        <div class="discovery-filter-row discovery-count-row"><span class="discovery-filter-label"><i>#</i>${panelText('结果数量','Results')}</span><div class="discovery-choices">${COUNT_OPTIONS.map(n=>discoveryOption(String(n),'resultCount',String(n),discoveryCustomCount?'custom':String(discoveryFilters.resultCount))).join('')}${discoveryOption(panelText('自定义','Custom'),'resultCount','custom',discoveryCustomCount?'custom':String(discoveryFilters.resultCount))}${discoveryCustomCount?`<input id="discovery-result-count" type="number" min="1" max="1000" step="1" value="${escapeHtml(discoveryFilters.resultCount)}" aria-label="${panelText('自定义结果数量（1–1000）','Custom result count (1–1000)')}">`:''}</div></div>
-        <aside class="discovery-strategy"><strong>✦ ${panelText('检索与导入', 'Search and import')}</strong><p>${panelText('模型制定策略并分析；软件检索 OpenAlex 等真实来源。结果数量不等于成功下载数量，不足时不凑数。', 'Your model plans and analyzes; LitGraph searches real scholarly sources. The target counts records, not guaranteed downloads.')}</p>${discoveryFilters.source==='institution'?`<p>${panelText('机构网址仅为入口，不代表已连接登录状态。','A library URL is a portal, not an authenticated connection.')} <a href="${escapeHtml(/^https?:\/\//i.test(discoveryInstitutionUrl)?discoveryInstitutionUrl:'#')}" target="_blank" rel="noopener noreferrer">${panelText('打开机构入口','Open library portal')}</a></p>`:''}</aside>
+        <div class="discovery-filter-row discovery-count-row"><span class="discovery-filter-label"><i>#</i>${panelText('检索数量','Search count')}</span><div class="discovery-choices">${COUNT_OPTIONS.map(n=>discoveryOption(String(n),'resultCount',String(n),discoveryCustomCount?'custom':String(discoveryFilters.resultCount))).join('')}${discoveryOption(panelText('自定义','Custom'),'resultCount','custom',discoveryCustomCount?'custom':String(discoveryFilters.resultCount))}${discoveryCustomCount?`<input id="discovery-result-count" type="number" min="5" max="100" step="1" value="${escapeHtml(discoveryFilters.resultCount)}" aria-label="${panelText('自定义检索数量（5–100）','Custom search count (5–100)')}">`:''}</div></div>
+        <aside class="discovery-strategy"><strong>✦ ${panelText('检索与导入', 'Search and import')}</strong><p>${panelText('模型制定策略并分析；软件检索 OpenAlex 等真实来源。检索数量不等于成功下载数量，不足时不凑数。', 'Your model plans and analyzes; LitGraph searches real scholarly sources. The target counts records, not guaranteed downloads.')}</p>${discoveryFilters.source==='institution'?`<p>${panelText('机构网址仅为入口，不代表已连接登录状态。','A library URL is a portal, not an authenticated connection.')} <a href="${escapeHtml(/^https?:\/\//i.test(discoveryInstitutionUrl)?discoveryInstitutionUrl:'#')}" target="_blank" rel="noopener noreferrer">${panelText('打开机构入口','Open library portal')}</a></p>`:''}</aside>
         ${discoveryNotice ? `<p role="status" class="discovery-notice">${escapeHtml(discoveryNotice)}</p>` : ''}
         ${discoveryProgress?`<p class="discovery-progress" role="status" aria-live="polite">${escapeHtml(discoveryProgress)}</p>`:''}
         <button id="start-discovery" class="discovery-search-button" type="button" ${discoveryImporting ? 'disabled' : ''}>${discoverySearching ? panelText('停止检索', 'Stop search') : `✦ ${panelText('开始检索', 'Start search')}`}</button>
@@ -3739,12 +3749,13 @@ async function runLiteratureDiscovery() {
     renderLiteratureDiscoveryWindow();
     return;
   }
-  try{discoveryCount(discoveryFilters.resultCount);}catch{discoveryNotice=panelText('结果数量请输入 1–1000 的整数。','Enter a result count from 1 to 1000.');renderLiteratureDiscoveryWindow();return;}
+  try{discoveryCount(discoveryFilters.resultCount);}catch{discoveryNotice=panelText('检索数量请输入 5–100 的整数。','Enter a search count from 5 to 100.');renderLiteratureDiscoveryWindow();return;}
   discoveryNotice = '';
   discoveryResults = [];
   discoverySelected.clear();
   discoveryStep = 'search';
   discoverySearching = true;
+  recordUse('search');
   discoveryController=new AbortController();
   const signal=discoveryController.signal;
   const progress=text=>{discoveryProgress=text;renderLiteratureDiscoveryWindow();};
@@ -3781,6 +3792,7 @@ async function confirmDiscoveryImport() {
   if (discoveryImporting) {discoveryController?.abort();return;}
   const chosen = discoveryResults.filter((metadata, index) => discoverySelected.has(discoveryResultKey(metadata, index)));
   if (!chosen.length) return;
+  recordUse('import');
   const importProjectId = currentProjectId;
   discoveryImporting = true;
   discoveryController=new AbortController();const signal=discoveryController.signal;
@@ -3953,6 +3965,7 @@ async function buildImportedNode(file, index) {
 
 async function processStagedPapers() {
   if (!stagedImportFiles.length || importProgress.processing) return;
+  recordUse('import');
   const files = [...stagedImportFiles];
   closeModal('paper-import');
   pendingImportedNodes = [];
@@ -4103,6 +4116,7 @@ canvas.addEventListener('pointerup', (event) => {
   pointerDown = null;
   canvas.classList.remove('dragging', 'panning');
   if (wasClick && wasNode) {
+    recordUse('explore');
     if (interactionMode !== 'multi') selectedNodes.clear();
     if (interactionMode === 'multi') {
       if (selectedNodes.has(wasNode.id)) selectedNodes.delete(wasNode.id);
@@ -4333,17 +4347,19 @@ document.querySelector('#multi-select-button').addEventListener('click', () => s
 document.querySelector('#box-select-button').addEventListener('click', () => setInteractionMode('box'));
 document.querySelector('#fullscreen-button').addEventListener('click', () => void toggleCanvasFullscreen());
 document.querySelector('#window-minimize').addEventListener('click', (event) => {
+  if (desktop) return void desktop.control('minimize');
   const shell = document.querySelector('.app-shell');
   const minimized = shell.classList.toggle('preview-minimized');
   event.currentTarget.setAttribute('aria-pressed', String(minimized));
   event.currentTarget.setAttribute('aria-label', panelText(minimized ? '恢复窗口' : '最小化窗口', minimized ? 'Restore window' : 'Minimize window'));
 });
 document.querySelector('#window-maximize').addEventListener('click', async (event) => {
+  if (desktop) return void desktop.control('maximize');
   if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
   else await document.documentElement.requestFullscreen?.().catch(() => {});
   event.currentTarget.setAttribute('aria-pressed', String(Boolean(document.fullscreenElement)));
 });
-document.querySelector('#window-close').addEventListener('click', () => toast(panelText('当前为网页预览；桌面版本将在此处关闭窗口', 'This is the web preview; the desktop build will close here')));
+document.querySelector('#window-close').addEventListener('click', () => desktop ? void desktop.control('close') : toast(panelText('当前为网页预览；桌面版本将在此处关闭窗口', 'This is the web preview; the desktop build will close here')));
 document.querySelector('#research-desk-entry').addEventListener('click', () => {
   if (deepReadWindow?.isConnected) closeResearchWindow();
   else openDeepReadWindow(selectedNodes.size ? null : selectedNode);
@@ -4440,8 +4456,9 @@ document.querySelector('#api-form').addEventListener('submit', async (event) => 
     await callAI([{ role: 'user', content: 'Reply with exactly: LitGraph API OK' }], candidate, /reasoner/i.test(candidate.model) ? 4096 : 64, { connectionTest: true });
     candidate.verified = true;
     if (externalState().connected) { await localRequest('disconnect', {}); await refreshExternal(); }
+    if (desktop) await desktop.saveConfig(candidate);
+    else localStorage.setItem('litgraph.aiConfig', JSON.stringify(candidate));
     aiConfig = candidate;
-    localStorage.setItem('litgraph.aiConfig', JSON.stringify(aiConfig));
     updateModelBadge();
     closeModal('api');
     toast(panelText('修改已保存', 'Changes saved'));
@@ -4480,6 +4497,7 @@ void pollExternalAgent();
 document.querySelector('#choose-documents-button').addEventListener('click', () => openPaperImportDialog());
 document.querySelector('#empty-model-access').addEventListener('click', () => openModal('api'));
 document.querySelector('#empty-sample-project').addEventListener('click', () => {
+  recordUse('sample');
   saveCurrentProject();
   activateProjectData(createSampleProject(), SAMPLE_PROJECT_ID);
   toast(panelText('已载入样例数据', 'Sample data loaded'));

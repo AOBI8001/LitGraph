@@ -7,11 +7,12 @@ import {publicFetch} from './public-fetch.js';
 const digest = value => createHash('sha256').update(String(value)).digest('hex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 export function localService(root, dependencies = {}) {
+  const dataRoot = dependencies.dataRoot || root;
   const scholarly=dependencies.scholarly||scholarlyService();
   const download=dependencies.download||publicFetch;
   const clients = new Map();
-  const indexRoot = path.join(root, 'projects', 'local-fulltext-index');
-  const samplePath = path.join(root, 'projects', 'local-sample', 'graph.json');
+  const indexRoot = path.join(dataRoot, 'projects', 'local-fulltext-index');
+  const samplePath = path.join(dataRoot, 'projects', 'local-sample', 'graph.json');
   async function readSample() {
     try { return JSON.parse(await readFile(samplePath, 'utf8')); }
     catch (error) { if (error.code === 'ENOENT') return { nodes: [] }; throw error; }
@@ -124,7 +125,7 @@ export function localService(root, dependencies = {}) {
       }
       if(url.pathname==='/__litgraph/project'&&req.method==='POST'){
         if(!data.projectId||!Array.isArray(data.project?.nodes))throw new Error('Invalid project snapshot.');
-        const folder=path.join(root,'projects','local-projects');await mkdir(folder,{recursive:true});
+        const folder=path.join(dataRoot,'projects','local-projects');await mkdir(folder,{recursive:true});
         await writeFile(path.join(folder,digest(data.projectId)+'.json'),JSON.stringify(data.project),'utf8');return send(200,{saved:true});
       }
       if (url.pathname === '/__litgraph/status') return send(200, status(c));
@@ -132,7 +133,7 @@ export function localService(root, dependencies = {}) {
       if (url.pathname === '/__litgraph/instructions' && req.method === 'POST') {
         // Rotate access on every explicit copy; old MCP registrations cannot keep access.
         c.agentToken = randomUUID(); c.agent = null;
-        return send(200, { root, node: process.execPath, script: path.join(root, 'scripts', 'litgraph-mcp.mjs'), url: `http://${req.headers.host}`, token: c.agentToken, guide: path.join(root, 'docs', 'LITGRAPH_AGENT_GUIDE.md') });
+        return send(200, { root: dataRoot, node: dependencies.nodeCommand || process.execPath, argsPrefix: dependencies.argsPrefix, env: dependencies.nodeEnv, script: path.join(root, 'scripts', 'litgraph-mcp.mjs'), url: `http://${req.headers.host}`, token: c.agentToken, guide: dependencies.guide || path.join(root, 'docs', 'LITGRAPH_AGENT_GUIDE.md') });
       }
       if (url.pathname === '/__litgraph/disconnect' && req.method === 'POST') { c.agentToken = randomUUID(); c.agent = null; c.jobs.clear(); return send(200, { ok: true }); }
       if (url.pathname === '/__litgraph/tasks' && req.method === 'POST') {

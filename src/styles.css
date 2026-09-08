@@ -2458,6 +2458,8 @@ textarea,
   --navigation-bar-height: 38px;
 }
 .desktop-titlebar { height: var(--desktop-bar-height); }
+.desktop-app .desktop-titlebar { -webkit-app-region: drag; }
+.desktop-app .desktop-titlebar button { -webkit-app-region: no-drag; }
 .desktop-app-title { gap: 7px; padding-left: 12px; }
 .desktop-app-title img { width: 17px; height: 17px; }
 .desktop-app-title span { font-size: 14px; }

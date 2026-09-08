@@ -17,7 +17,7 @@ export async function publicFetch(address,{limit=16*1024*1024,signal,redirects=4
   if(!addresses.length||addresses.some(a=>!publicAddress(a.address)))throw new Error('Private/local network downloads are blocked.');
   const selected=addresses[0];
   return new Promise((resolve,reject)=>{
-    const req=https.get(url,{signal:signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000),headers:{'User-Agent':'LitGraph/0.2 (+https://openalex.org)','Accept':'*/*','Accept-Encoding':'identity'},lookup:(_host,options,cb)=>options.all?cb(null,[selected]):cb(null,selected.address,selected.family)},res=>{
+    const req=https.get(url,{signal:signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000),headers:{'User-Agent':'LitGraph/1.0 (+https://github.com/AOBI8001/LitGraph)','Accept':'*/*','Accept-Encoding':'identity'},lookup:(_host,options,cb)=>options.all?cb(null,[selected]):cb(null,selected.address,selected.family)},res=>{
       if([301,302,303,307,308].includes(res.statusCode)&&res.headers.location){res.resume();if(!redirects)return reject(new Error('Too many download redirects.'));try{publicFetch(new URL(res.headers.location,url).href,{limit,signal,redirects:redirects-1}).then(resolve,reject);}catch(error){reject(error);}return;}
       if(res.statusCode<200||res.statusCode>=300){res.resume();return reject(Object.assign(new Error(`Source HTTP ${res.statusCode}`),{status:res.statusCode}));}
       if(Number(res.headers['content-length'])>limit){res.destroy();return reject(new Error('Source exceeds size limit.'));}

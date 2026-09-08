@@ -1,6 +1,6 @@
 # Research space: current behavior
 
-Updated: 2026-09-07.
+LitGraph 1.0.
 
 The subtitle is “回答以原文证据为依据，AI 推断会额外标出。” / “Answers are grounded in source evidence; AI inferences are explicitly marked.”
 

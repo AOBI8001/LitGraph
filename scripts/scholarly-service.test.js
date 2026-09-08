@@ -9,7 +9,9 @@ const c=fromCrossref({DOI:'10.1234/1',title:['Test 1'],author:[{family:'A'}],pub
 assert.equal(mergeMetadata(a,c).citations,0);assert.deepEqual(mergeMetadata(a,c).referenceDois,['10.1234/9']);
 const filled=mergeMetadata(b,c);assert.equal(filled.citations,999);assert.equal(filled.citationSource,'Crossref');assert.equal(filled.citationRetrievedAt,c.citationRetrievedAt);
 let calls=0;
-const service=scholarlyService({json:async address=>{calls++;const url=new URL(address);assert.equal(url.hostname,'api.openalex.org');return {results:Array.from({length:200},(_,i)=>fixture(i+1+(url.searchParams.get('cursor')==='*'?0:200))),meta:{next_cursor:url.searchParams.get('cursor')==='*'?'next':null}};}});
-const f={yearStart:2020,yearEnd:2026,language:'en',articleType:'any',source:'open',resultCount:250,sort:'cited'};
-const result=await service.search({queries:['test'],filters:f});assert.equal(result.papers.length,250);assert.equal(calls,2);assert.equal(new Set(result.papers.map(p=>p.doi)).size,250);
-console.log('Scholarly sources: cursor pagination >200, provenance, complete authors, references, unknown counts and private-network rejection passed.');
+const service=scholarlyService({json:async address=>{calls++;const url=new URL(address);assert.equal(url.hostname,'api.openalex.org');return {results:Array.from({length:50},(_,i)=>fixture(i+1+(url.searchParams.get('cursor')==='*'?0:50))),meta:{next_cursor:url.searchParams.get('cursor')==='*'?'next':null}};}});
+const f={yearStart:2020,yearEnd:2026,language:'en',articleType:'any',source:'open',resultCount:100,sort:'cited'};
+const result=await service.search({queries:['test'],filters:f});assert.equal(result.papers.length,100);assert.equal(calls,2);assert.equal(new Set(result.papers.map(p=>p.doi)).size,100);
+await assert.rejects(()=>service.search({queries:['test'],filters:{...f,resultCount:1}}));
+await assert.rejects(()=>service.search({queries:['test'],filters:{...f,resultCount:101}}));
+console.log('Scholarly sources: cursor pagination, 5–100 validation, provenance, complete authors, references, unknown counts and private-network rejection passed.');

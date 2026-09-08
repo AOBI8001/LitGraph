@@ -1,6 +1,6 @@
 # LitGraph project data contract
 
-Updated: 2026-09-08. Graph format remains schemaVersion 0.1; application version is independent.
+LitGraph 1.0. Graph format remains schemaVersion 0.1; application version is independent.
 
 Import / export project JSON through the LitGraph project controls. External Agent tasks normally return results through the local API, not by modifying project files directly.
 

@@ -4,6 +4,7 @@ async page => {
   const assert=(condition,message)=>{if(!condition)throw new Error(message);};
   const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
   const report=[];
+  const errors=[];const onError=error=>errors.push(error.message);page.on('pageerror',onError);
   try{
     await page.route(pattern,inject);await page.setViewportSize({width:1329,height:958});
     for(const basis of ['argument','semantic']){
@@ -37,6 +38,6 @@ async page => {
       await page.screenshot({path:`output/playwright/timeline-${basis}-orbit.png`});
       report.push({basis,pan:true,modelFixed:true,yearPlanesFixed:true,boundedOrbit:true,noRoll:true,zoom:true,keyboard:true,nodePicking:true});
     }
-    return report;
-  }finally{await page.unroute(pattern,inject);await page.evaluate(saved=>{localStorage.clear();Object.entries(saved).forEach(([k,v])=>localStorage.setItem(k,v))},backup);await page.reload();}
+    assert(errors.length===0,'3D interaction errors: '+errors.join('; '));return report;
+  }finally{page.off('pageerror',onError);await page.unroute(pattern,inject);await page.evaluate(saved=>{localStorage.clear();Object.entries(saved).forEach(([k,v])=>localStorage.setItem(k,v))},backup);await page.reload();}
 }

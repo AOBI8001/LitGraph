@@ -1,5 +1,7 @@
 async (page) => {
   const backup = await page.evaluate(() => ({ ...localStorage }));
+  const pattern = '**/src/main.js*';
+  const inject = async route => { const response = await route.fetch(); await route.fulfill({response, body: await response.text() + `\nwindow.__researchQA={async setup(){activateProjectData(createSampleProject(),'qa-research-'+crypto.randomUUID());for(const node of nodes)await saveFulltext(currentProjectId,node,{fileName:'fixture.md',sourceKind:'markdown',markdown:'# Synthetic test source\\n\\n这是一段自动化测试用的原文，不是实际论文结论。研究方法采用实验设计，测量抑制控制和反应时间，并比较参与者的任务表现。主要结果说明研究设计、样本和测量指标需要共同考虑。'});saveCurrentProject()}};`}); };
   const requests = [];
   let behavior = 'answer';
   const blocked = [];
@@ -13,13 +15,17 @@ async (page) => {
   const waitRequests = async count => { for (let i=0; i<120 && requests.length<count; i++) await page.waitForTimeout(250); if(requests.length<count) throw new Error('No model request'); };
   const send = async text => { await page.locator('#deep-read-input').fill(text); await page.locator('#deep-read-input').press('Enter'); };
   try {
+    await page.route(pattern, inject);
     await page.route('https://litgraph-model.test/**', handler);
     await page.evaluate(() => {
+      localStorage.setItem('litgraph.language', 'zh');
       localStorage.setItem('litgraph.aiConfig', JSON.stringify({ model: 'deepseek-v4-pro', endpoint: 'https://litgraph-model.test/v1', apiKey: 'fixture-not-a-key', provider: 'deepseek', protocol: 'openai-chat', verified: true }));
       localStorage.removeItem('litgraph.researchMode');
       Object.keys(localStorage).filter(k => k.startsWith('litgraph.chat.')).forEach(k => localStorage.removeItem(k));
     });
     await page.setViewportSize({ width: 1329, height: 958 }); await page.reload();
+    await page.waitForFunction(() => window.__researchQA);
+    await page.evaluate(() => window.__researchQA.setup());
     await page.getByRole('button', { name: '研究空间', exact: true }).click();
     if(await page.locator('#research-response-mode').inputValue() !== 'quick') throw new Error('Quick not default');
     await send('比较所有论文的主要结果'); await waitRequests(1);
@@ -63,6 +69,7 @@ async (page) => {
     if(await page.locator('#research-response-mode').inputValue() !== 'quick') throw new Error('Mode preference not retained');
     return { verified:'actual request controls, 50-paper fulltext scope, source-free answer, inference display, no auto retry, manual recovery, followups, pause/resume mode snapshot, light/dark geometry', geometry, evidenceChunks:payload.evidence.length, requestCharacters:JSON.stringify(quick).length };
   } finally {
+    await page.unroute(pattern, inject);
     for(const route of blocked) await route.abort().catch(()=>{});
     await page.unroute('https://litgraph-model.test/**', handler);
     await page.evaluate(saved=>{localStorage.clear();Object.entries(saved).forEach(([k,v])=>localStorage.setItem(k,v));}, backup);
