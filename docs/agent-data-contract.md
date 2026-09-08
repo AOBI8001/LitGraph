@@ -55,7 +55,7 @@ Discovery adds source provenance: metadataSource / metadataSources, metadataApiU
 
 Source reference lists use referenceOpenAlexIds, referenceDois and referenceRecords. The last field preserves available DOI, unstructured text, author, year and title, not a guarantee that every reference is complete. These fields are distinct from a formatted citation for the node itself.
 
-New durable full-text bindings use fulltextKey, originalRelativePath, markdownRelativePath, fulltextStatus, fulltextPersistence and conversionQuality. Paths resolve beneath projects/local-fulltext-index in the current application directory. fulltextStorageKey refers to an optional IndexedDB cache. fulltextError explains failed acquisition or extraction. indexed means available extracted text, not guaranteed OCR of all pages or verified table/formula reconstruction. See the discovery contract for state meanings and backup requirements.
+Durable full-text bindings use fulltextKey, originalRelativePath, markdownRelativePath, fulltextStatus, fulltextPersistence and conversionQuality. Paths resolve beneath projects/local-fulltext-index in the current data root: the Windows application-data directory for the desktop build, or the repository root for the developer preview. They do not resolve inside the installed program archive. fulltextStorageKey refers to an optional IndexedDB cache. fulltextError explains failed acquisition or extraction. indexed means available extracted text, not guaranteed OCR of all pages or verified table/formula reconstruction. See the discovery contract for state meanings and backup requirements.
 
 ## Relations
 
@@ -67,6 +67,6 @@ Theory IDs referenced by nodes must exist in theories. label and labelEn support
 
 ## Release safety
 
-Private paths, original full text and user projects must not be committed to the public repository. MIT does not relicense imported papers. The bundled public fixture is produced by src/public-sample.js; it has no real DOI, download URL or private source path.
+Private paths, original full text and user projects must not be committed to the public repository. MIT does not relicense imported papers. The bundled 50-paper sample is loaded by src/public-sample.js from src/sample-project.json. It preserves public bibliographic metadata, available DOI/source identifiers, graph relations and theory colors. It contains no personal file paths, model credentials or bundled full-text originals. The fictional minimal JSON example above illustrates the schema only; it is not the bundled sample.
 
 For AI request / response formats, use the separate [discovery](literature-discovery-agent-spec.md) and [research](research-space-rag-agent-spec.md) contracts; they are not interchangeable with graph JSON.

@@ -1,142 +1,327 @@
+[![简体中文](https://img.shields.io/badge/语言-简体中文-555555?style=for-the-badge)](README.md) [![English](https://img.shields.io/badge/Language-English-7047EB?style=for-the-badge)](README.en.md)
+
 # LitGraph
 
-_1.0 · Local-first literature graphs and evidence-grounded research_
+_Connect the literature. Follow the evidence._
 
-[简体中文](README.md) · [Download](https://github.com/AOBI8001/LitGraph/releases/latest) · [Website](https://litgraph.aobi.qzz.io/) · [MIT](LICENSE)
+Reading builds a collection. Research builds an understanding: which papers address the same question, where their findings converge, why they disagree, and what is worth asking next.
 
-Discover papers, organize originals, explore relationships, and ask questions in one workspace. LitGraph provides viewpoint graphs and year trees, theory-based and semantic layouts, 2D / 3D views, and research conversations scoped to one paper, selected papers, or a whole project.
+LitGraph is a desktop workspace for literature reviews, theoretical comparison, and research exploration. It brings **scholarly discovery, interactive graphs, and source-grounded conversations** into one workflow. Start with a collection of papers, explore its structure, then ask focused questions about one paper, a selection, or the entire project.
 
-Projects and originals stay on your computer by default. Remote AI features require your own model API or external Agent; no model credits are included. Local-first does not mean every operation is offline.
+See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-## 📥 Download and install
+**1.0 · Windows 10 / 11 x64 · MIT licensed**
 
-1. Open [GitHub Releases](https://github.com/AOBI8001/LitGraph/releases/latest) and download **LitGraph-Setup-1.0.0-x64.exe**. The source-code archives are not installers.
-2. Run the installer on Windows 10 / 11 x64, choose a directory, then launch LitGraph. No separate Node.js or Python installation is needed.
-3. A fresh installation opens a blank project. Connect a model or load the optional 50-paper sample.
+[Download](https://github.com/AOBI8001/LitGraph/releases/latest) · [Website](https://litgraph.aobi.qzz.io/) · [Feedback](https://github.com/AOBI8001/LitGraph/issues)
 
-This build is **unsigned**. Windows or your browser may show an unknown-publisher or security warning. Only download from this repository, verify the source before deciding to run it, and do not disable system protection. Compare the file hash with the Release's `SHA256SUMS.txt`:
+---
 
-```powershell
-Get-FileHash .\LitGraph-Setup-1.0.0-x64.exe -Algorithm SHA256
-```
+## 📍 Contents
 
-Checksums verify file integrity, not publisher identity. Uninstall through Windows Installed Apps; normal uninstallation preserves user data. Automatic updates are not included: download a newer installer to upgrade.
+- [Download and get started](#-download-and-get-started)
+- [From a research question to a paper collection](#-from-a-research-question-to-a-paper-collection)
+- [Explore the structure of the literature](#-explore-the-structure-of-the-literature)
+- [Research conversations grounded in source text](#-research-conversations-grounded-in-source-text)
+- [Choose your AI](#-choose-your-ai)
+- [RAG, layout algorithms, and optimizations](#algorithms)
+- [Data and privacy](#-data-and-privacy)
+- [Frequently asked questions](#-frequently-asked-questions)
+- [Documentation and open-source collaboration](#-documentation-and-open-source-collaboration)
 
-## 🔌 Connect AI
+## 📦 Download and get started
 
-### Method 1: External Agent
+### Install
 
-In Settings → Model connection, copy the external Agent instructions and send them to a local tool-capable Agent such as Codex or Claude Code. They include the working directory, contract documents, and session-specific MCP connection details.
+1. Open [GitHub Releases](https://github.com/AOBI8001/LitGraph/releases/latest).
+2. Download `LitGraph-Setup-1.0.0-x64.exe` from the release assets.
+3. Run the installer, choose an installation location, and open LitGraph.
 
-The Agent must start the adapter, perform the handshake, and keep processing tasks. LitGraph then shows a connection confirmation and the model name reported by the Agent. The desktop application provides the adapter runtime; a separate Node.js installation is unnecessary.
+The installer includes the application runtime; no separate Node.js or Python installation is required. Windows x64 is the currently distributed platform. LitGraph is free to use. Model usage charges and subscription access are governed by the providers you choose.
 
-MCP configuration differs between Agent products. Pasting the instructions into a plain chatbot without tool execution does not connect it. Connection text contains temporary credentials: never publish it. Reconnecting or closing the application can invalidate the session. A green indicator reports recent activity, not verified Agent identity.
+> ⚠️ **Installation notice:** Version 1.0 is unsigned. Windows may display an unknown-publisher or SmartScreen warning. Use the files published in this repository and compare the installer checksum with `SHA256SUMS.txt` from the same release. Keep system security protections enabled.
 
-### Method 2: Model API
+### Your first project
 
-Enter the endpoint, API key and model, then test and save. Supported protocols include OpenAI-compatible Chat Completions / Responses and Anthropic Messages. For DeepSeek, Qwen, Kimi or another provider, use an endpoint and model actually supported by that service.
+The application opens with a blank project and four starting points:
 
-The desktop application encrypts saved configuration and sends model requests from its local process, avoiding browser CORS restrictions. Confirm image support against the model's capabilities. A successful connection test does not guarantee web browsing, vision or unlimited context. LitGraph supplies scholarly search and download tools; provider charges, rate limits and regional availability still apply.
-
-## 🧭 Workflow
-
-### 1. Create a project
-
-The top-left menu creates, renames, switches and deletes projects. Start with the sample, discover literature or import your own papers. The sample contains 50 public bibliographic records and abstracts, with AI-organized summaries and some relationships. It is not a set of independently validated research claims and includes no private PDF / Markdown originals. Third-party abstracts and papers are not covered by the software's MIT license.
-
-### 2. Discover and import literature
-
-1. Describe your topic and set years, language, publication type, access preference and sorting.
-2. Search count presets are **5 / 10 / 20 / 50 / 100**, with custom integers from 5 to 100.
-3. AI plans queries; LitGraph retrieves real records from **OpenAlex, Europe PMC and Crossref**, applies filters and deduplication, then asks AI to assess relevance.
-4. Review the results and confirm selected records.
-5. The software enriches available titles, authors, DOIs, years, abstracts, references and citation counts, attempts lawful PDF acquisition, extracts text to local Markdown and binds the node's original-document action.
-
-Open access is an access restriction, not a separate search engine. Institution login opens the library entry supplied by the user; it **does not read browser cookies, bypass paywalls or override institutional limits**. Import legally obtained originals manually when automatic acquisition is unavailable.
-
-The requested count is a target, not a guarantee of results or full texts. Citation counts come from available source metadata, not from counting PDF text; missing values remain unknown. Platforms may report different counts and coverage.
-
-### 3. Explore the graph
-
-| Feature | Behavior |
+| Entry | Purpose |
 | --- | --- |
-| Viewpoint graph | Organize papers by theory or semantic similarity and inspect support, opposition and relatedness |
-| Year tree | Explore publication timing and relationships with adjustable year spacing |
-| 2D / 3D | In viewpoint 3D, blank-canvas dragging rotates the model; year-tree 3D emphasizes camera panning |
-| 3D navigation | Arrow keys / WASD move the camera; the wheel zooms; the canvas provides a hint |
-| Nodes | Hover for information; click for selection, details and related links; click the same node to deselect |
-| Multiple / box selection | Select papers for research; leaving selection mode clears the selection |
-| Filters / data | Filter, inspect statistics and edit table data |
-| Appearance | Chinese / English, light / dark themes and eight canvas-only backgrounds; theme switching resets to white / black |
+| **Model connection** | Connect an Agent or API |
+| **Sample data** | Explore a 50-paper graph |
+| **Literature discovery** | Search from a research topic |
+| **Choose paper files** | Import existing research materials |
 
-Theory colors remain visible even without full text. Switching view, layout or graph type clears selection. Graph relatedness is not evidence of causation.
+Load the sample to learn the graph, then create a project for your own work. The sample contains public bibliographic metadata and graph relationships, including theory-category colors. Full-text analysis requires the corresponding readable originals.
 
-### 4. Ask questions grounded in originals
+### A complete workflow
 
-Research tabs can cover all papers, one paper or selected papers. **Enter sends; Shift+Enter inserts a line break.** Windows can be dragged and resized; files can be dropped into the composer.
+1. **Create a project:** Name your research topic and connect AI.
+2. **Collect papers:** Use Literature discovery or import existing PDF / Markdown materials.
+3. **Review the materials:** Check candidate records, metadata, and full-text availability.
+4. **Explore the structure:** Switch between the graph and timeline, choose theory or semantic layouts, and filter papers.
+5. **Read more closely:** Open an original from its node, or compare selected papers in Research space.
+6. **Follow the questions:** Continue with specific follow-ups and return to the saved project as your research develops.
 
-Quick favors shorter answers and lower latency; Expert favors depth. These are response preferences rather than fixed model names or guaranteed timings. Elapsed time appears while waiting. Pause cancels the request; resubmitting starts a new request, not a continuation of interrupted provider-internal reasoning.
+The project menu supports creation, switching, renaming, and deletion. Project JSON supports graph-data exchange; transferring a complete research collection also requires its associated originals and indexes.
 
-LitGraph retrieves relevant local Markdown / source excerpts and requires evidence-grounded answers, with AI inferences identified separately. Long explicit citations are not mandatory by default. Up to three concise, context-specific follow-up questions can continue the discussion. Missing full text must be disclosed rather than treated as a fully read paper.
+## 🔍 From a research question to a paper collection
 
-## 🔐 Storage and privacy
+### Search by research intent
 
-Desktop data is stored under `%APPDATA%\litgraph`, independently of the installation directory:
+Literature discovery places search conditions and result review in one window. Describe the question, population, method, or evidence you want, then set the scope. For example:
 
-| Content | Location |
+> Find English-language empirical studies on how generative AI affects university students' critical thinking, focusing on experimental design, intervention duration, and measurement methods.
+
+Available conditions include:
+
+- **Year range:** Enter inclusive start and end years.
+- **Language:** Any, English, or Chinese.
+- **Article type:** Any, meta-analysis, review, research, or conference.
+- **Access source:** Open access or institution login.
+- **Search count:** 5, 10, 20, 50, 100, or a custom integer from 5–100; the default is 20.
+- **Sorting:** Combined, relevance, newest, or citations.
+
+The count is a target number of candidate records. Filters, source coverage, and network availability determine how many can actually be retrieved. The interface reports the actual result count. Combined and relevance sorting currently both use AI relevance scores.
+
+### Real sources, with AI assessment
+
+The model turns your research intent into search terms. LitGraph retrieves records from scholarly sources, then asks the model to assess their relevance in batches. Authors, titles, DOIs, abstracts, and citation counts retain their source values; the model supplies relevance explanations.
+
+| Channel | Role in the workflow |
 | --- | --- |
-| Projects, preferences and conversations | `workspace-state.json` |
-| OS-encrypted model configuration | `model-config.encrypted` |
-| PDFs, Markdown and source records | `projects/local-fulltext-index/` |
-| Discovery import snapshots | `projects/local-projects/` |
-| Agent contracts and adapter | `agent-guide/` |
-| Random installation ID and pending basic events | `metrics-state.json` |
+| **OpenAlex** | Primary search and scholarly relationships |
+| **Europe PMC** | Supplementary search and full-text leads |
+| **Crossref** | DOI metadata and reference enrichment |
 
-Close the app before backing up the complete data directory. Project JSON alone does not include every original. Encrypted credentials may not decrypt on another computer; configure them again after migration. Never publish this directory, your API key or Agent connection text.
+Results pass through filters and DOI/title-based deduplication, excluding papers already in the project. Records with an unconfirmed language or type cannot pass the corresponding strict filter. Chinese-language coverage depends on what these sources index; the institutional entry point guides authorized access.
 
-The official desktop build sends a random installation ID, event ID, launch/use type and timestamp to count first use, daily active installations, launches and core operations. It does not send paper content, conversations, keys, file paths, hardware IDs or individual action names. Disable it under Settings → About LitGraph. See [Privacy](PRIVACY.md) and the [maintainer's metrics guide](docs/metrics.md).
+### Review, acquire, and link originals
 
-## 🧠 Algorithms and optimization
+Inspect the sources, relevance explanations, and access status, select the papers you want, and confirm acquisition and import. Candidates enter the project only after confirmation.
 
-- **Theory layout:** force-directed positions reflect theory membership and relationships, with adjustable visual parameters.
-- **Semantic layout:** local term features and similarity drive layout; this is not a paid model embedding service.
-- **Year tree:** combines chronology and relationships without assuming temporal order establishes citation or causation.
-- **Research RAG:** local chunking, lexical matching and excerpt ranking augment generation. This is not vector-database retrieval and does not guarantee every paper fits into a single request.
-- **Rendering:** effective-pixel-ratio rendering, on-demand 3D loading and cached background textures support clarity and performance.
-- **Requests:** batch processing, cancellation and stale-result isolation help avoid outdated answers replacing current state.
-- **Local service:** session credentials distinguish browser and Agent roles; downloads validate public addresses, redirects and size limits.
+For each selected paper, the application performs the available steps:
 
-Built-in OCR is not available. Scanned documents, complex columns, formulas and tables may need manual preparation. Network restrictions, model context limits, permissions and rate limits can affect results. Verify important academic claims; tests cannot establish that every computer, provider and document is bug-free.
+1. Enrich the complete available author list, journal, year, DOI, abstract, and references.
+2. Acquire a lawfully available open PDF and save the original.
+3. Extract readable text into a Markdown index with physical PDF page markers.
+4. Bind the original and index to the paper node, connecting the Original action and Research space to the same material.
+5. Match source reference identifiers against papers in the project to establish citation edges.
 
-## 🛠️ Develop and build
+A failed acquisition preserves the bibliographic record and its status while other papers continue. Stopping an import keeps completed work. Restricted originals can be obtained through an authorized institutional route and added to the research materials afterward.
 
-Install Node.js **22.12+** and pnpm:
+### Understand the bibliographic fields
 
-```sh
-git clone https://github.com/AOBI8001/LitGraph.git
-cd LitGraph
-pnpm install --frozen-lockfile
-pnpm dev
+The full available author list is preserved in the data. Compact canvas labels show one author, `A & B` for two authors, or the first author followed by `et al.` for three or more.
+
+Abstracts come from source-provided abstract fields. Citation counts retain their source and retrieval time, with missing values left unknown. A formatted citation for a paper, the references it cites, and the number of citations it has received are three separately handled kinds of information.
+
+## 📊 Explore the structure of the literature
+
+### Two ways to see the collection
+
+| View | Research question |
+| --- | --- |
+| **Graph** | Which topics and theories connect papers? |
+| **Timeline** | How does the research develop over time? |
+| **Data panel** | Which records match specific fields? |
+
+The graph and timeline both support 2D / 3D. Theory layouts organize papers around project categories and relationships; semantic layouts use title-and-abstract text similarity to organize neighboring papers. The timeline adds publication time to reveal connections between earlier and later work.
+
+### Nodes and edges
+
+- **Nodes** represent papers, with titles, authors, years, abstracts, AI summaries, and original-file status.
+- **Category colors** identify theories; shading can encode the theoretical association strength stored in the data.
+- **Node size** can map citation counts, with controls for overall size and variation.
+- **Semantic relationships** can express support, opposition, and relatedness; **citation edges** come from source-reference matches.
+
+These visual encodings support browsing and comparison. A citation alone does not establish agreement; theoretical classifications and relationship interpretations should be read alongside the source text.
+
+### Interaction for focused reading
+
+Hover to inspect a paper label. Click to open its details and emphasize its connections. Clicking the same node again clears the selection; in single-selection mode, clicking another node replaces the selected paper.
+
+Multi-select and box selection create a set of papers to investigate. The research entry reflects that selection and carries it into Research space. Leaving either selection mode, or changing views and spatial layouts, clears the current selection.
+
+In the 3D graph, dragging rotates the model around its own center. The timeline uses panning that preserves the orientation of its temporal structure, with limited-angle rotation available separately. Use the wheel to zoom and arrow keys or `WASD` to move the camera; a canvas legend explains the controls. The toolbar also offers node renaming, position locking, fit-to-canvas, and fullscreen browsing.
+
+### Filters and reading progress
+
+Combine year, journal/source, original-file availability, primary-theory, and relationship filters with title, author, or DOI search. The statistics panel summarizes the visible papers, relationships, journal sources, full-text availability, and read/unread progress to help plan the next reading session.
+
+### A configurable workspace
+
+The interface supports Chinese and English, day and night themes, and eight independent canvas backgrounds: white, black, purple stardust, ivory paper, soft pink, lavender, lagoon, and dark cosmos. Switching the application theme restores its corresponding plain background; you can then choose another canvas background independently.
+
+Literature discovery and Research space share a floating-window design with dragging, edge resizing, and close controls. Original paper titles and abstracts retain their source language. With a model connected, AI summaries can obtain and cache translations for the selected interface language.
+
+## 💬 Research conversations grounded in source text
+
+### Set the scope of a question
+
+Research space supports a single paper, selected papers, or all papers in the project, with separate conversation tabs. Each request captures its paper scope when sent, keeping later selection changes from mixing other materials into that request.
+
+For example:
+
+- “Does this paper's design support the causal explanation given by its authors?”
+- “How do the outcome measures differ across these studies?”
+- “Which findings agree, and which differences might follow from the samples or tasks?”
+- “What additional evidence would be needed to answer this question?”
+
+### Source text first, explicit inference
+
+The application prioritizes indexed originals, retrieves relevant passages, and sends them to the model with per-paper coverage information. Answers are instructed to follow that evidence. Further AI deductions must be marked `[AI inference]`, or `【AI 推断】` in Chinese.
+
+Ask for sources whenever you want to inspect the basis of an answer. The model may use only supplied evidence identifiers and available source locations. Missing full text, extraction problems, and conflicting evidence should be described specifically.
+
+Selecting all papers sets the retrieval scope; each request still has a finite context budget. Relevant excerpts and coverage information distinguish the evidence supplied for this answer from material that remains unverified.
+
+### Quick and Expert
+
+| Preference | Emphasis |
+| --- | --- |
+| **Quick** | Relevant evidence and a direct answer |
+| **Expert** | Methods, disagreements, and limitations |
+
+Both preferences follow the same evidence requirements. They adjust context budgets and response guidance; compatible providers may also receive supported reasoning controls. Waiting time depends on the model, material volume, and provider load.
+
+### A continuous conversation
+
+- `Enter` sends; `Shift + Enter` adds a line.
+- During processing, elapsed time is shown and the send control becomes Stop.
+- After stopping, you can resubmit the previous question; a new draft sends a new question.
+- Cancelled and failed answers do not enter subsequent context as successful responses.
+- Each valid answer is required to provide three specific, short follow-up questions. Click one to continue.
+- Drag materials into the conversation; images require vision support from the connected model and client.
+
+## 🔌 Choose your AI
+
+### Option 1: External Agent
+
+Use an existing Codex, Claude, or other Agent environment. LitGraph provides MCP connection instructions and a bundled adapter, with one shared task contract for compatible Agents.
+
+1. Open Model connection and copy the external Agent connection text.
+2. Send it to your Agent and follow the MCP setup instructions. The client may require a tool reload or a new session.
+3. A successful handshake produces a connection confirmation in LitGraph.
+4. Keep the Agent's task-processing session running while using Literature discovery and Research space.
+
+The connection text includes session-specific addresses, runtime settings, and credentials. Share it only with an Agent you trust. Integration depends on the external tool supporting configuration and ongoing task processing.
+
+### How MCP coordinates the work
+
+MCP connects the product interface to the external Agent's task loop. LitGraph prepares questions, evidence, and structured requirements; the Agent claims tasks and submits results; the application validates and displays them.
+
+| Tool | Responsibility |
+| --- | --- |
+| `litgraph_connect` | Handshake and capability report |
+| `litgraph_context` | Session context and connection renewal |
+| `litgraph_next_task` | Wait for and claim a task |
+| `litgraph_submit_result` | Return the corresponding result |
+| `litgraph_disconnect` | End the connection |
+
+Search planning, candidate assessment, and research answers each have their own output contract. Connection status reflects recent handshake and tool activity; the Agent must continue claiming tasks to answer new requests. See the [shared Agent guide](docs/LITGRAPH_AGENT_GUIDE.md) for the complete agreement.
+
+### Option 2: Model API
+
+Call a model directly from the product. Enter the service address, API key, and model name, then use Test & save. Enable image support according to the provider's actual capabilities.
+
+Supported protocols include OpenAI-compatible Chat Completions, OpenAI Responses, and Anthropic Messages. Services implementing those protocols can be configured; model availability, permissions, and quotas are controlled by each provider.
+
+LitGraph supplies scholarly search, acquisition, text conversion, and file association. The model supplies search planning, relevance assessment, and research answers. API mode supports the same workflow, with model configuration encrypted using operating-system facilities.
+
+<a name="algorithms"></a>
+
+## ⚙️ RAG, layout algorithms, and optimizations
+
+### Research RAG: Retrieve within a defined paper scope
+
+Research space uses **retrieval-augmented generation (RAG)**: retrieve evidence from the specified papers, then generate an answer using that evidence. The current retrieval layer uses deterministic term matching, per-paper coverage allocation, and a limited set of explicit Chinese/English term expansions.
+
+```mermaid
+flowchart LR
+    accTitle: LitGraph research evidence workflow
+    accDescr: A request captures its paper scope, retrieves and ranks source passages, allocates evidence context, then generates and validates an answer with follow-up questions.
+    paper_scope[Capture the paper scope] --> source_text[Load text and coverage]
+    source_text --> rank_chunks[Chunk and rank passages]
+    rank_chunks --> evidence_budget[Allocate evidence across papers]
+    evidence_budget --> generate_answer[Generate answer and follow-ups]
+    generate_answer --> validate_result[Validate structure and evidence IDs]
 ```
 
-The development page usually opens at [http://127.0.0.1:4320/](http://127.0.0.1:4320/); use the actual terminal URL if the port changes. Do not expose the development service to the public network.
+The implementation:
 
-```sh
-pnpm test
-pnpm build
-pnpm test:desktop
-pnpm check:release
-pnpm dist:win
-```
+- Splits text into chunks of roughly 1,800 characters, preserving PDF page markers where present.
+- Scores question-term overlap, with a small explicit bilingual expansion dictionary.
+- Allocates passages across papers with available evidence before filling remaining capacity with relevant excerpts.
+- Uses evidence budgets of approximately 28,000 / 42,000 characters for Quick / Expert, alongside a bounded recent conversation.
+- Requires an answer and three follow-ups, and checks supplied evidence IDs when an answer cites them.
 
-Windows artifacts appear in `release/` and are not automatically uploaded. Desktop tests use isolated profiles and synthetic credentials, with production metrics disabled. Browser development previews use browser storage and do not provide the desktop's OS-encrypted credential persistence.
+These mechanisms govern scope, evidence supply, and response structure. An external vector database and a separate reranking model are not part of the current implementation. See the [Research space RAG contract](docs/research-space-rag-agent-spec.md).
 
-## 📚 Documentation
+### Graph algorithms: Theories and text similarity
 
-- [Architecture](docs/architecture.md) · [Data contract](docs/agent-data-contract.md)
-- [Discovery AI contract](docs/literature-discovery-agent-spec.md) · [Research AI / RAG contract](docs/research-space-rag-agent-spec.md)
-- [External Agent / MCP guide](docs/LITGRAPH_AGENT_GUIDE.md) · [Research behavior](docs/research-space-current-behavior.md)
-- [Backgrounds, language and interaction](docs/canvas-backgrounds-and-language.md)
-- [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Third-party notices](THIRD_PARTY_NOTICES.md)
+**Theory layouts** combine category anchors, node repulsion, and link constraints in a force-directed simulation. Positions express structural relationships, with adjustable visual parameters and optional position locking.
 
-Report reproducible problems in [GitHub Issues](https://github.com/AOBI8001/LitGraph/issues), redacting credentials, private documents and personal paths. Original code and documentation use MIT; third-party dependencies and papers retain their own rights.
+**Semantic layouts** extract terms from titles and abstracts, build TF–IDF-style weighted vectors, and use cosine similarity to find neighboring papers. Each paper contributes up to five neighbors above the threshold; duplicate pairs are merged and visual weights normalized. Titles receive additional input weight to emphasize their topics.
+
+**The timeline** maps publication time to a temporal axis, then combines the selected theoretical or semantic relationships with spatial positioning. Citation edges are created when source-reference evidence matches both endpoints within the project.
+
+Graph text vectors organize the collection spatially. Research answers use the source-passage retrieval described above. These mechanisms serve complementary purposes: seeing relationships and finding evidence.
+
+### Optimizations for sustained exploration
+
+- **Clear rendering:** Canvas resolution accounts for display pixel density and page scaling; 3D uses antialiasing and high-resolution text textures.
+- **Lightweight hover:** Hover updates paper hints, reserving selection and connection-state changes for clicks.
+- **On-demand resources:** 3D resources load when needed, while cached background artwork reduces repeated preparation.
+- **Initial framing:** The 3D graph fits model bounds to the viewport on first entry, stopping automatic adjustments when the user takes control.
+- **Bounded retrieval:** Candidate limits, pagination bounds, and finite retries contain work; relevance assessment is batched to reduce per-request pressure.
+- **Reusable originals:** Saved originals and Markdown indexes can be read again in later conversations.
+- **Context allocation:** Per-paper evidence allocation and length limits balance comparison coverage with model cost.
+- **Request isolation:** Cancelled, expired, or late results from earlier tasks cannot overwrite a newer request.
+
+## 🔐 Data and privacy
+
+Projects, conversations, and saved originals primarily reside on your device. Model configuration is stored separately with encryption. Graph browsing and management of existing materials operate on-device; online discovery and remote-model answers require network access and the relevant service permissions.
+
+Remote-model requests include the question, necessary metadata, relevant source excerpts, and attached materials. External Agent mode passes corresponding tasks to the Agent you choose. Consider your rights to use the papers and the provider's data policies when selecting a processing route.
+
+The official desktop app includes minimal usage reporting: a random installation ID, random event ID, launch/use type, and timestamp, used for first-use, active-installation, and operation counts. Events contain no papers, conversations, API keys, file paths, or hardware identifiers. Reporting can be disabled in Settings → About LitGraph. See [Privacy](PRIVACY.md).
+
+Back up the project together with associated originals and indexes. Normal uninstallation preserves user data; migration to another device may require model credentials to be configured again. Updates are currently installed by downloading a newer installer.
+
+## 💡 Frequently asked questions
+
+### Why was a paper found but its full text not downloaded?
+
+Searchable metadata and downloadable full text have different access conditions. LitGraph acquires lawful open versions; login requirements, publisher restrictions, or broken links may leave a metadata-only record. Obtain the original through an authorized route and import it to complete the materials.
+
+### Does entering an institutional library URL grant subscription access?
+
+The institutional entry point provides access guidance. The current version does not share browser cookies. Restricted originals must be obtained through an authorized institutional route; connecting an API or Agent does not expand subscription rights.
+
+### Why does an answer mention abstract-only evidence?
+
+The paper may lack readable full text, or PDF extraction may not have succeeded. Check its original/index status and supply the missing material. Scanned PDFs need OCR first; complex tables, formulas, and multi-column layouts may also require checking against the original.
+
+### Can I use only an API, without an external Agent?
+
+Yes. Search tools, acquisition services, and original-text indexing are supplied by the application. Both AI connection routes can use the workflow. The model must still support the selected protocol, context size, and structured response requirements.
+
+### Why can Expert take longer?
+
+Expert provides a larger evidence budget and emphasizes deeper comparison. Choose Quick, narrow the paper scope, or split a broad question into focused requests. Provider rate limits and model load also affect response time.
+
+## 📚 Documentation and open-source collaboration
+
+| Topic | Document |
+| --- | --- |
+| **Architecture and data flow** | [System architecture](docs/architecture.md) |
+| **Discovery and import** | [Literature discovery contract](docs/literature-discovery-agent-spec.md) |
+| **Evidence and answers** | [Research space RAG contract](docs/research-space-rag-agent-spec.md) |
+| **Agent integration** | [Shared MCP guide](docs/LITGRAPH_AGENT_GUIDE.md) |
+| **Project interchange** | [Data contract](docs/agent-data-contract.md) |
+| **Visual behavior** | [Canvas, themes, and language](docs/canvas-backgrounds-and-language.md) |
+| **Security and privacy** | [Security](SECURITY.md) · [Privacy](PRIVACY.md) |
+
+Report problems and feature ideas through [Issues](https://github.com/AOBI8001/LitGraph/issues), or follow the [contribution guide](CONTRIBUTING.md) to participate. Redact keys, connection credentials, and private research materials from reports.
+
+Original LitGraph code and documentation use the [MIT License](LICENSE), allowing use, modification, and redistribution. Third-party components retain their own licenses, and papers retain their original rights. See [Third-party notices](THIRD_PARTY_NOTICES.md).
