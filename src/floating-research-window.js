@@ -15,8 +15,8 @@ export function mountResearchWindow(element, layer) {
     Object.assign(element.style, { width: `${width}px`, height: `${height}px`, left: `${left}px`, top: `${top}px`, transform: 'none' });
     return { width, height, left, top };
   };
-  const width = Math.min(kind === 'research' ? 940 : 860, layer.clientWidth - leftBoundary() - gutter);
-  const height = Math.min(kind === 'research' ? 680 : 580, layer.clientHeight - gutter * 2);
+  const width = Math.min(kind === 'research' ? 1020 : 980, layer.clientWidth - leftBoundary() - gutter);
+  const height = Math.min(kind === 'research' ? 720 : 660, layer.clientHeight - gutter * 2);
   apply(savedBounds.get(kind) || { width, height, left: leftBoundary() + (layer.clientWidth - leftBoundary() - gutter - width) / 2, top: (layer.clientHeight - height) / 2 });
   element.tabIndex = -1;
   element.setAttribute('role', 'dialog');

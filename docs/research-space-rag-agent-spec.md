@@ -1,6 +1,6 @@
 # Research space: evidence and AI response contract
 
-LitGraph 1.0. Executable sources: `src/research-agent.js`, `src/research-evidence.js`, `src/research-mode.js`.
+LitGraph 1.1.8. Executable sources: `src/research-agent.js`, `src/research-evidence.js`, `src/research-mode.js`.
 
 ## Implemented RAG
 

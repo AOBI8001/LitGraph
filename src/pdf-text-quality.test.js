@@ -1,0 +1,22 @@
+import assert from 'node:assert/strict';
+import {assessPdfTextQuality,readablePdfPage} from './pdf-text-quality.js';
+
+const chinese='这是清楚可读的中文学术论文内容与研究方法结果。'.repeat(30);
+const english='The study evaluated education and compared reported outcomes using validated methods. '.repeat(30);
+assert.equal(assessPdfTextQuality([chinese,chinese,chinese]).usable,true);
+assert.equal(assessPdfTextQuality([english,english]).usable,true);
+assert.equal(assessPdfTextQuality(['हिन्दी में विज्ञान और शिक्षा के अध्ययन की पद्धति। '.repeat(100)]).usable,true);
+assert.equal(assessPdfTextQuality(['தமிழ் மொழியில் அறிவியல் ஆய்வுகள் மற்றும் கல்வி. '.repeat(100)]).usable,true);
+assert.equal(assessPdfTextQuality([chinese,'தமிழ் மொழியில் அறிவியல் ஆய்வுகள் மற்றும் கல்வி. '.repeat(100),'தமிழ் மொழியில் அறிவியல் ஆய்வுகள் மற்றும் கல்வி. '.repeat(100)]).usable,true,'A coherent translated/multilingual text is not random encoding corruption');
+assert.equal(assessPdfTextQuality([english+' \ufffd'.repeat(4)]).usable,true);
+assert.equal(assessPdfTextQuality(['\ufffd'.repeat(50)+' ABC'.repeat(50)]).usable,false);
+const table=english+'\u0005'.repeat(73);
+assert.equal(assessPdfTextQuality([english,table,english]).usable,true,'Sparse unmapped formula/table glyphs must not reject readable prose');
+assert.deepEqual(assessPdfTextQuality([english,table]).uncertainPages,[2]);
+assert.equal(assessPdfTextQuality(['\u0005'.repeat(100)+'ABC '.repeat(100)]).usable,false,'Widespread control-character corruption is still rejected');
+assert.equal(readablePdfPage('p\u0005.05\n\ue840'), 'p[unmapped PDF symbol].05\n[unmapped PDF symbol]');
+const corrupt='ᒝถኧᇴᏇᓕ෍ᔈኧᄏዩ ௅ᒬဣ੝ࡼዐஅஆஇஈஉ ᑽߒሆጙဟࡔ။'.repeat(35);
+const result=assessPdfTextQuality([chinese,corrupt,corrupt]);
+assert.equal(result.usable,false);assert.deepEqual(result.affectedPages,[2,3]);
+assert.equal(assessPdfTextQuality([chinese,corrupt,chinese]).usable,true,'One unusual page alone does not establish the mixed-script mapping failure');
+console.log('PDF text quality: readable Chinese/English/Hindi/Tamil, multilingual text, replacement corruption and strongly inconsistent mixed-script mapping checks passed.');

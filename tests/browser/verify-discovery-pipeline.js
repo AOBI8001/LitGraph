@@ -5,7 +5,7 @@ async page=>{
  const stub=async route=>{
   const body=route.request().postDataJSON(),messages=body.messages||body.input;
   const user=JSON.parse(messages.filter(m=>m.role==='user').at(-1).content);
-  const result=user.papers?{assessments:user.papers.map((p,i)=>({id:p.id,score:50+i*8,reason:'Source-backed reporting guideline relevant to this query.'}))}:{queries:['The PRISMA 2020 statement updated guideline'],summary:'Search exact topic in scholarly sources.'};
+  const result=user.original_excerpts?{summary:'原文片段已用于提取内容；请核对研究的适用范围。',label:'报告指南',keywords:['reporting'],theory:{label:'报告指南',labelEn:'Reporting guidelines'},relationships:[]}:user.papers?{assessments:user.papers.map((p,i)=>({id:p.id,score:50+i*8,reason:'Source-backed reporting guideline relevant to this query.'}))}:{queries:['The PRISMA 2020 statement updated guideline'],summary:'Search exact topic in scholarly sources.'};
   const text=JSON.stringify(result);
   await route.fulfill({json:route.request().url().endsWith('/messages')?{content:[{type:'text',text}],stop_reason:'end_turn'}:route.request().url().endsWith('/responses')?{status:'completed',output:[{type:'message',content:[{type:'output_text',text}]}]}:{choices:[{message:{content:text},finish_reason:'stop'}]}});
  };
@@ -16,7 +16,7 @@ async page=>{
    await page.evaluate(protocol=>{const q=window.__discoveryQA;q.createBlankProject();q.configure(protocol);q.openLiteratureDiscoveryWindow();q.setup()},protocol);
    const presets=await page.locator('[data-discovery-filter="resultCount"]').allTextContents();assert(presets.slice(0,5).join(',')==='5,10,20,50,100','Count presets missing');
    await page.locator('#start-discovery').click();await page.waitForFunction(()=>!window.__discoveryQA.searching,{},{timeout:120000});
-   const records=await page.evaluate(()=>window.__discoveryQA.results);assert(records.length>0&&records.length<=5,'Incorrect count: '+await page.evaluate(()=>window.__discoveryQA.notice));assert(records[0].metadataSource==='OpenAlex','No real source');assert(records[0].language==='en','Language filter failed');
+   const records=await page.evaluate(()=>window.__discoveryQA.results);assert(records.length>0&&records.length<=5,'Incorrect count: '+await page.evaluate(()=>window.__discoveryQA.notice));assert(records.every(p=>['OpenAlex','Europe PMC','Crossref'].includes(p.metadataSource)),'No real source: '+records.map(p=>p.metadataSource));assert(records.every(p=>p.language==='en'),'Language filter failed');
    await page.screenshot({path:`output/playwright/discovery-${protocol}-results.png`});
    if(protocol==='openai-chat'){
     const fixtureIndex=records.findIndex(p=>p.doi?.toLowerCase()==='10.1371/journal.pmed.1003583');
@@ -28,7 +28,7 @@ async page=>{
     await page.reload();await page.waitForFunction(()=>window.__discoveryQA);
     const evidence=await page.evaluate(async()=>{const q=window.__discoveryQA,n=q.nodes.find(n=>n.doi==='10.1371/journal.pmed.1003583')||q.nodes[0];const blob=await q.originalBlob(n);const result=await q.prepareEvidence([n],'What does PRISMA recommend?');q.renderInspector(n);return {bytes:blob?.size,coverage:result.coverage,evidence:result.evidence.length};});
     assert(evidence.bytes>10000&&evidence.evidence>0&&evidence.coverage[0].status==='fulltext_indexed_excerpts_only','Disk recovery or evidence retrieval failed');
-    const popupPromise=page.waitForEvent('popup');await page.locator('#open-pdf-button').click();const popup=await popupPromise;await popup.waitForURL('blob:**');await popup.close();
+    const downloadPromise=page.waitForEvent('download');await page.locator('#open-pdf-button').click();await downloadPromise;
     report.push({protocol,realDownload:true,diskRecovery:true,originalButton:true,...n,evidence});
    }else report.push({protocol,search:true,analysis:true,count:records.length});
   }

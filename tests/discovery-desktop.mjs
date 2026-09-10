@@ -1,0 +1,100 @@
+import {_electron as electron} from 'playwright-core';
+import assert from 'node:assert/strict';
+import {mkdir,mkdtemp} from 'node:fs/promises';
+import path from 'node:path';
+import http from 'node:http';
+const root=process.cwd();await mkdir('output/desktop',{recursive:true});
+const dataRoot=await mkdtemp(path.join(root,'output/desktop/discovery-'));
+let calls=0,receivedPlan;
+const api=http.createServer(async(req,res)=>{
+ let data='';for await(const chunk of req)data+=chunk;
+ const body=JSON.parse(data);calls++;
+ assert.match(body.messages[0].content,/plan scholarly searches/);
+ res.writeHead(200,{'Content-Type':'application/json'});
+ res.end(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({queries:['frog morphology behavior','青蛙 构造 行为','frog anatomy behavior','蛙类 解剖 行为'],subject_terms:{en:['frog','anuran'],zh:['青蛙','蛙类']},summary:'Private strategy text'})}}]}));
+});
+await new Promise(resolve=>api.listen(0,'127.0.0.1',resolve));
+const options={executablePath:process.env.LITGRAPH_TEST_EXECUTABLE||path.join(root,'node_modules/electron/dist/electron.exe'),args:process.env.LITGRAPH_TEST_EXECUTABLE?[]:[root],env:{...process.env,LITGRAPH_TEST_MODE:'1',LITGRAPH_TEST_DATA:dataRoot},timeout:45000};delete options.env.ELECTRON_RUN_AS_NODE;
+let app;
+try{
+ app=await electron.launch(options);const page=await app.firstWindow(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.locator('#empty-model-access').waitFor();
+ await page.evaluate(async endpoint=>{
+  await window.litgraphDesktop.saveConfig({endpoint,apiKey:'synthetic-test-key',model:'fixture',protocol:'openai-chat',verified:true});
+  window.litgraphDesktop.saveState({...localStorage});
+ },`http://127.0.0.1:${api.address().port}/v1`);
+ await page.reload();await page.locator('#empty-model-access').waitFor();
+ await page.route('**/__litgraph/search',async route=>{
+  receivedPlan=route.request().postDataJSON();
+  await route.fulfill({json:{papers:[{recordId:'fixture-frog',title:'Frog morphology and behavior',authors:['A Example'],year:2024,language:'en',articleType:'research',abstract:'Source abstract.',sourceUrl:'https://example.org/frog',isOpenAccess:true,metadataSource:'Fixture',relevanceReason:'Obsolete AI critique must not be shown'}],sources:['Fixture'],warnings:[],incomplete:true}});
+ });
+ await page.locator('[data-panel="literature-discovery"]').click();
+ assert.equal(await page.getByRole('button',{name:'meta分析',exact:true}).count(),1);
+ assert.deepEqual(await page.locator('[data-discovery-filter="source"]').evaluateAll(items=>items.map(el=>el.dataset.discoveryValue)),['open','combined','institution']);
+ assert.equal(await page.locator('[data-discovery-value="open"] .discovery-beta').count(),0);
+ assert.equal(await page.locator('.discovery-beta').count(),2);
+ assert.ok(await page.locator('.discovery-source-beta').evaluateAll(buttons=>buttons.every(button=>{
+   const range=document.createRange();range.selectNodeContents(button.firstChild);
+   return range.getBoundingClientRect().right<=button.querySelector('.discovery-beta').getBoundingClientRect().left;
+ })),'Beta badge must not overlap the label');
+ assert.equal(await page.locator('.discovery-beta').first().getAttribute('aria-label'),'测试中');
+ assert.deepEqual(await page.locator('.discovery-header-actions button').evaluateAll(items=>items.map(el=>el.id)),['discovery-browser-open','discovery-search-toggle','discovery-history-toggle','close-literature-discovery']);
+ await page.locator('#discovery-browser-open').click();
+ await page.waitForFunction(()=>true);
+ let browserShell;
+ for(let i=0;i<40;i++){browserShell=app.windows().find(p=>p.url().endsWith('/institution.html'));if(browserShell)break;await new Promise(r=>setTimeout(r,100));}
+ assert.ok(browserShell,'Browser icon did not open the native browser');
+ await browserShell.locator('[data-action="save-close"]').click();
+ await page.locator('[data-discovery-value="open"]').click();
+ await page.locator('#discovery-window-query').fill('青蛙的构造和行为');
+ await page.locator('#start-discovery').click();
+ await page.locator('.discovery-result-card').waitFor();
+ assert.match(await page.locator('.discovery-channel-report').innerText(),/Fixture/);
+ await page.screenshot({path:'output/desktop/discovery-combined-zh.png'});
+ await page.locator('#language-button').click();
+ assert.equal(await page.locator('#discovery-browser-open').getAttribute('aria-label'),'Open browser');
+ assert.deepEqual(await page.locator('[data-discovery-filter="source"]').allTextContents(),['Open access','Open + institutionbeta','Institution sign-inbeta']);
+ assert.match(await page.locator('.discovery-channel-report').innerText(),/Searched channels/);
+ await page.screenshot({path:'output/desktop/discovery-combined-en.png'});
+ await page.locator('#language-button').click();
+ assert.equal(calls,1,'Discovery performed an extra AI assessment');
+ assert.deepEqual(receivedPlan.queries,['青蛙的构造和行为','frog morphology behavior','青蛙 构造 行为','frog anatomy behavior','蛙类 解剖 行为']);
+ assert.doesNotMatch(await page.locator('.literature-discovery-window').innerText(),/Obsolete AI|Private strategy|相关性分析未完成/);
+ const projectA=await page.evaluate(()=>localStorage.getItem('litgraph.activeProjectId'));
+ await page.locator('#discovery-history-toggle').click();
+ assert.match(await page.locator('.discovery-history').innerText(),/青蛙的构造和行为/);
+ await page.locator('#project-selector-button').click();await page.locator('[data-project-action="new"]').click();
+ assert.doesNotMatch(await page.locator('.discovery-history').innerText(),/青蛙的构造和行为/,'New project leaked old history');
+ await page.locator('#project-selector-button').click();await page.locator(`[data-project-id="${projectA}"]`).click();
+ assert.match(await page.locator('.discovery-history').innerText(),/青蛙的构造和行为/,'History did not refresh after switching back');
+ await page.screenshot({path:'output/desktop/discovery-history-scoped.png'});
+ await page.locator('[data-history-expand]').click();
+ await page.locator('[data-history-results]').click();
+ let releaseDownload;
+ const blockedDownload=new Promise(resolve=>{releaseDownload=resolve;});
+ await page.route('**/__litgraph/acquire',async route=>{
+  await blockedDownload;
+  await route.fulfill({json:{status:'unavailable',error:'Fixture has no PDF',retryable:false}}).catch(()=>{});
+ });
+ await page.locator('.discovery-result-card input[type="checkbox"]').check();
+ await page.locator('#discovery-confirm').click();
+ await page.waitForFunction(()=>{
+  const projects=JSON.parse(localStorage.getItem('litgraph.projects.v1'));
+  return projects[localStorage.getItem('litgraph.activeProjectId')].data.nodes.length===1;
+ });
+ await page.locator('#discovery-history-toggle').click();
+ await page.locator('[data-history-delete]').click();
+ assert.equal(await page.locator('.discovery-history-row').count(),0);
+ assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('litgraph.projects.v1'))[localStorage.getItem('litgraph.activeProjectId')].data.nodes.length),1,'Deleting history removed a paper');
+ releaseDownload();
+ await page.waitForFunction(()=>!document.querySelector('#discovery-history-toggle')?.classList.contains('processing'));
+ await page.reload();await page.locator('#project-selector-label').waitFor();
+ assert.equal(await page.evaluate(()=>JSON.parse(localStorage.getItem('litgraph.discoveryHistory.v1')).length),0,'Deleted history was restored');
+ await page.locator('#display-toggle').click();
+ await page.locator('[data-panel="nodes"]').click();
+ assert.equal(await page.locator('#node-size').getAttribute('max'),'1000');
+ assert.equal(await page.locator('#node-size').inputValue(),'100');
+ await page.locator('#node-size').fill('1000');
+ await page.locator('#node-size').dispatchEvent('input');
+ assert.deepEqual(errors,[]);console.log(JSON.stringify({passed:true,tests:['one AI planning call only','keyword forwarding','source result without AI critique','meta label','project-switch/new-project history isolation']}));
+}finally{await app?.close().catch(()=>{});api.closeAllConnections();await new Promise(resolve=>api.close(resolve));}

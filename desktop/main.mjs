@@ -1,13 +1,20 @@
-import { app, BrowserWindow, ipcMain, shell, safeStorage } from 'electron';
+import { app, BrowserWindow, ipcMain, shell, safeStorage, clipboard, dialog, session } from 'electron';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, copyFileSync, readdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, copyFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { localService } from '../scripts/local-service.js';
 import { createMetrics } from './metrics.mjs';
+import { execFile } from 'node:child_process';
+import { institutionBrowser } from './institution.mjs';
+import { scansciService } from '../scripts/scansci-service.js';
+import { withoutPreferences } from '../src/settings-reset.js';
+import { createAgentRuntime } from './agent-runtime.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+// Isolate the single-instance lock as well as storage for verification runs.
+if (process.env.LITGRAPH_TEST_MODE === '1' && process.env.LITGRAPH_TEST_DATA) app.setPath('userData', path.resolve(process.env.LITGRAPH_TEST_DATA));
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
@@ -29,8 +36,28 @@ async function startDesktop() {
   const adapter = path.join(agentDocs, 'litgraph-mcp.mjs');
   copyFileSync(path.join(root, 'scripts/litgraph-mcp.mjs'), adapter);
   const atomicWrite = (file, data) => { writeFileSync(file + '.tmp', data, { mode: 0o600 }); renameSync(file + '.tmp', file); };
-  const metrics = await createMetrics(dataRoot, { disabled: testing || !app.isPackaged });
   let window, origin = '', savedState = {}, pending = new Map();
+  const connectionFile=path.join(agentDocs,'connection.json');
+  const pairingFile=path.join(agentDocs,'pairing.json');
+  let pairingEnabled=false;
+  try{pairingEnabled=JSON.parse(readFileSync(pairingFile,'utf8')).enabled===true;}catch{}
+  const publishConnection=token=>atomicWrite(connectionFile,JSON.stringify({enabled:pairingEnabled,running:Boolean(origin&&token),...(pairingEnabled&&token?{url:origin,token}:{})}));
+  publishConnection();
+  const engine=scansciService(root,{dataRoot});
+  const institutions=institutionBrowser({dataRoot,testing,engine,onDownload:()=>{
+    if(window&&!window.isDestroyed())window.webContents.send('desktop:institution-download');
+  }});
+  const agentRunner = await createAgentRuntime(dataRoot, { getProxyEnv: async provider => {
+    // Native CLIs may not read Windows/PAC settings. Reuse the OS-selected proxy
+    // for this provider only; never borrow institution cookies or credentials.
+    if (process.env.HTTPS_PROXY || process.env.https_proxy || process.env.ALL_PROXY || process.env.all_proxy) return {};
+    const routes = await session.defaultSession.resolveProxy(provider === 'codex' ? 'https://chatgpt.com' : 'https://api.anthropic.com');
+    const first = routes.split(';')[0].trim(), match = /^(PROXY|HTTPS|SOCKS5) ([\w.\-\[\]:]+)$/.exec(first);
+    if (!match) return {};
+    const proxy = `${match[1] === 'SOCKS5' ? 'socks5h' : match[1] === 'HTTPS' ? 'https' : 'http'}://${match[2]}`;
+    return { HTTPS_PROXY: proxy, HTTP_PROXY: proxy };
+  } });
+  const metrics = await createMetrics(dataRoot, { disabled: testing || !app.isPackaged });
   try { savedState = JSON.parse(readFileSync(statePath, 'utf8')); } catch {}
   const trusted = event => Boolean(window && event.sender === window.webContents && event.senderFrame === window.webContents.mainFrame && event.senderFrame.url.startsWith(origin + '/'));
   const guard = event => { if (!trusted(event)) throw Error('Untrusted window'); };
@@ -44,7 +71,7 @@ async function startDesktop() {
     if (!trusted(event)) { event.returnValue = null; return; }
     let config = null;
     try { if (existsSync(keyPath) && safeStorage.isEncryptionAvailable()) config = JSON.parse(safeStorage.decryptString(readFileSync(keyPath))); } catch {}
-    event.returnValue = { state: savedState, config, metricsEnabled: metrics.enabled() };
+    event.returnValue = { state: savedState, config, metricsEnabled: metrics.enabled(), version: app.getVersion() };
   });
   ipcMain.on('desktop:save-state', (event, state) => {
     try { guard(event); persistState(state); event.returnValue = true; } catch { event.returnValue = false; }
@@ -54,6 +81,52 @@ async function startDesktop() {
     if (!safeStorage.isEncryptionAvailable()) throw Error('Windows credential encryption is unavailable. Configuration was not saved.');
     atomicWrite(keyPath, safeStorage.encryptString(JSON.stringify(config)));
     return true;
+  });
+  const deleteConfig = () => {
+    for(const controller of pending.values())controller.abort();
+    for(const file of [keyPath,keyPath+'.tmp'])try{unlinkSync(file);}catch(error){if(error.code!=='ENOENT')throw error;}
+  };
+  ipcMain.handle('desktop:delete-config', event => {guard(event);deleteConfig();return true;});
+  ipcMain.handle('desktop:reset-settings', async (event,state) => {
+    guard(event);
+    await agentRunner.disconnect();
+    await institutions.clearSession();
+
+    deleteConfig();
+    persistState(withoutPreferences(state));
+    return true;
+  });
+  ipcMain.handle('desktop:copy-text', async (event, value) => {
+    guard(event);
+    if (typeof value !== 'string' || value.length > 4 * 1024 * 1024) throw Error('Invalid clipboard text');
+    // Native clipboard writes remain valid after preparing the Agent instructions
+    // asynchronously, even if Windows has moved focus away from this renderer.
+    await clipboard.writeText(value);
+    return true;
+  });
+  ipcMain.handle('desktop:institution',async(event,action,data={})=>{
+    guard(event);
+    if(action==='search')return institutions.search(data);
+    if(action==='saved')return institutions.saved();
+    if(action==='open')return institutions.open(data);
+    if(action==='acquire')return institutions.acquire(data);
+    if(action==='cancel')return institutions.cancel(data.id);
+    if(action==='list')return institutions.list();
+    if(action==='read')return institutions.read(data.id);
+    if(action==='acknowledge')return institutions.acknowledge(data.id);
+    throw Error('Unknown institution action');
+  });
+  ipcMain.handle('desktop:agent-runtime', async (event, action, data = {}) => {
+    guard(event);
+    if (action === 'status') return agentRunner.status();
+    if (action === 'connect') return agentRunner.connect(data.provider);
+    if (action === 'choose') {
+      if (!['codex', 'claude'].includes(data.provider)) throw Error('Unsupported agent.');
+      const selected = await dialog.showOpenDialog(window, { title: 'Choose official agent executable', properties: ['openFile'], filters: [{ name: 'Executable', extensions: ['exe'] }] });
+      if (selected.canceled) return null;
+      return agentRunner.connect(data.provider, selected.filePaths[0]);
+    }
+    throw Error('Unknown agent action');
   });
   ipcMain.handle('desktop:control', (event, action) => {
     guard(event);
@@ -78,8 +151,23 @@ async function startDesktop() {
       return { status: result.status, body: Buffer.concat(chunks).toString('utf8'), contentType: result.headers.get('content-type') || 'application/json' };
     } finally { pending.delete(request.id); }
   });
-  const service = localService(root, { dataRoot, nodeCommand: process.execPath, argsPrefix: [adapter], nodeEnv: { ELECTRON_RUN_AS_NODE: '1' }, guide: path.join(agentDocs, 'LITGRAPH_AGENT_GUIDE.md') });
-  const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.json': 'application/json' };
+  const openOriginal = async file => {
+    const error = await shell.openPath(file);
+    if (error) await new Promise((resolve, reject) => execFile('rundll32.exe', ['shell32.dll,OpenAs_RunDLL', file], { windowsHide: true }, err => err ? reject(err) : resolve()));
+  };
+  const openDataFolder = async folder => {
+    const expected = path.resolve(dataRoot, 'data');
+    if (path.resolve(folder) !== expected) throw Error('Invalid data folder');
+    const error = await shell.openPath(expected);
+    if (error) throw Error(error);
+  };
+  const service = localService(root, { dataRoot, installRoot: path.dirname(process.execPath), openOriginal, openDataFolder, nodeCommand: process.execPath, argsPrefix: [adapter], nodeEnv: { ELECTRON_RUN_AS_NODE: '1' }, guide: path.join(agentDocs, 'LITGRAPH_AGENT_GUIDE.md'),connectionFile,
+    engine,agentRunner,searchInstitution:(input,signal)=>institutions.search(input,signal),acquireInstitution:(input,signal)=>institutions.acquire(input,signal),
+    onAgentSession:token=>publishConnection(token),
+    onAgentAuthorize:token=>{pairingEnabled=true;atomicWrite(pairingFile,JSON.stringify({enabled:true}));publishConnection(token);},
+    onAgentRevoke:()=>{pairingEnabled=false;atomicWrite(pairingFile,JSON.stringify({enabled:false}));publishConnection();}
+  });
+  const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.json': 'application/json' };
   const server = http.createServer((req, res) => {
     const next = async () => {
       try {
@@ -97,29 +185,26 @@ async function startDesktop() {
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   origin = `http://127.0.0.1:${server.address().port}`;
+
   window = new BrowserWindow({ width: 1440, height: 940, minWidth: 900, minHeight: 600, frame: false, show: false, backgroundColor: '#ffffff', title: 'LitGraph', webPreferences: { partition: 'litgraph', preload: path.join(root, 'desktop/preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false, webSecurity: true, devTools: !app.isPackaged || testing } });
   window.webContents.setWindowOpenHandler(({ url }) => {
-    // Chromium's built-in PDF viewer requires JavaScript. Originals are normalized
-    // to PDF/plain text in openPaper; child windows receive no application preload.
-    if (url === 'about:blank' || url.startsWith('blob:' + origin + '/')) return { action: 'allow', overrideBrowserWindowOptions: { frame: true, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false, preload: undefined } } };
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
-  });
-  window.webContents.on('did-create-window', child => {
-    child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    child.webContents.on('will-navigate', (event, url) => {
-      if (url === 'about:blank' || url.startsWith('blob:' + origin + '/')) return;
-      event.preventDefault();
-      if (/^https?:\/\//i.test(url)) { void shell.openExternal(url); child.close(); }
-    });
   });
   window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith(origin + '/')) { event.preventDefault(); if (/^https?:\/\//i.test(url)) void shell.openExternal(url); } });
   const allowPermission = (contents, permission) => contents === window.webContents && contents.getURL().startsWith(origin + '/') && ['fullscreen', 'clipboard-sanitized-write'].includes(permission);
   window.webContents.session.setPermissionCheckHandler((contents, permission) => allowPermission(contents, permission));
   window.webContents.session.setPermissionRequestHandler((contents, permission, callback) => callback(allowPermission(contents, permission)));
-  window.once('ready-to-show', () => { window.show(); void metrics.launch(); });
+  window.once('ready-to-show', () => { window.maximize(); window.show(); void metrics.launch(); });
+  window.on('closed',()=>app.quit());
   app.on('second-instance', () => { if (window.isMinimized()) window.restore(); window.focus(); });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => { for (const controller of pending.values()) controller.abort(); void metrics.close(); server.close(); });
+  let quitting=false,shutdownDone=false;
+  app.on('before-quit', event => {
+    if(shutdownDone)return;
+    event.preventDefault();if(quitting)return;quitting=true;
+    for(const controller of pending.values())controller.abort();
+    void Promise.all([agentRunner.close(),institutions.close()]).catch(()=>console.warn('Desktop services could not complete shutdown.')).finally(()=>{publishConnection();void metrics.close();server.close();shutdownDone=true;app.quit();});
+  });
   await window.loadURL(origin);
 }

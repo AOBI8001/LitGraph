@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import {paperAnalysisMessages,validatePaperAnalysis,normalizeEvidenceQuote} from './paper-analysis.js';
+const text='The intervention improved response time in the experimental group.';
+const peers=[{id:'peer',text:'The experimental group showed reduced response time after training.'}];
+const result={summary:'A source-grounded finding.',label:'Response time',keywords:['inhibition'],theory:{label:'Response inhibition'},relationships:[{targetId:'peer',relation:'support',strength:.8,rationale:'Converging response time results.',sourceQuote:'improved response time',targetQuote:'reduced response time'}]};
+assert.throws(()=>validatePaperAnalysis({...result,theory:null},text,peers));
+assert.throws(()=>validatePaperAnalysis({...result,theory:{id:'unclassified',label:'待分类'}},text,peers));
+const valid=validatePaperAnalysis(result,text,peers);
+assert.deepEqual(valid.relationships,result.relationships);
+const uncertain=validatePaperAnalysis({...result,relationships:[{...result.relationships[0],sourceQuote:'The result [unmapped PDF symbol] 0.05'}]},'The result [unmapped PDF symbol] 0.05',peers);
+assert.equal(uncertain.relationshipValidation.warnings[0].code,'unmapped_pdf_symbol');
+assert.deepEqual(valid.relationshipValidation,{attempted:1,accepted:1,rejected:0,warnings:[]});
+assert.equal(result.relationshipValidation,undefined,'validation must not mutate the model response');
+const invalidTarget=validatePaperAnalysis({...result,relationships:[{...result.relationships[0],targetId:'invented'}]},text,peers);
+assert.equal(invalidTarget.summary,result.summary);
+assert.equal(invalidTarget.relationships.length,0);
+assert.equal(invalidTarget.relationshipValidation.warnings[0].code,'unknown_peer');
+const mixed=validatePaperAnalysis({...result,relationships:[result.relationships[0],{...result.relationships[0],sourceQuote:'Invented evidence with no source'}]},text,peers);
+assert.equal(mixed.relationships.length,1,'reject only the unsupported edge, not the valid summary or another valid edge');
+assert.equal(mixed.relationshipValidation.rejected,1);
+assert.equal(mixed.relationshipValidation.warnings[0].code,'source_quote_not_found');
+const invalid=validatePaperAnalysis({...result,relationships:[null,{...result.relationships[0],strength:'0.8'},{...result.relationships[0],rationale:42},{...result.relationships[0],targetQuote:'improved response time'}]},text,peers);
+assert.equal(invalid.relationships.length,0);
+assert.equal(invalid.relationshipValidation.warnings[3].code,'peer_quote_not_found','a quotation in the wrong paper cannot support the edge');
+assert.throws(()=>validatePaperAnalysis({summary:'',relationships:[]},text,peers));
+assert.throws(()=>validatePaperAnalysis({...result,relationships:null},text,peers));
+assert.equal(normalizeEvidenceQuote('The eﬀect of inter-\nvention on “inhibition”\u00ad.'),'The effect of intervention on "inhibition".');
+const wrapped='The inter-\nvention improved eﬃciency in the experimental group.';
+assert.equal(validatePaperAnalysis({...result,relationships:[{...result.relationships[0],sourceQuote:'intervention improved efficiency'}]},wrapped,peers).relationships.length,1);
+for(const quote of ['干预改善了实验组的反应时间。','improved … in the experimental group','The intervention worsened response time','improved response time 99']){
+  assert.equal(validatePaperAnalysis({...result,relationships:[{...result.relationships[0],sourceQuote:quote}]},text,peers).relationships.length,0,'translations, spliced quotations, changed findings and invented values are not evidence');
+}
+assert.match(paperAnalysisMessages({id:'n'},text,peers,[],'en')[0].content,/BOTH supplied original texts/);
+assert.match(paperAnalysisMessages({id:'n'},text,peers,[],'zh')[0].content,/Keep quotation language unchanged/);
+const categories=JSON.parse(paperAnalysisMessages({id:'n'},text,peers,[{id:'unclassified',label:'待分类'},{id:'control',label:'Cognitive control'}],'en')[1].content).theories;
+assert.deepEqual(categories,[{id:'control',label:'Cognitive control'}],'the model must not be invited to reuse an unclassified placeholder');
+console.log('Original analysis: valid summaries survive rejected edges; strict dual-source evidence, conservative PDF normalization and explicit validation reports.');

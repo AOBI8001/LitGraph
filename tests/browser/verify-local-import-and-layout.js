@@ -1,0 +1,115 @@
+async page => {
+ const assert=(v,m)=>{if(!v)throw Error(m);};
+ const backup=await page.evaluate(()=>({...localStorage}));
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const pattern='**/src/main.js*';
+ const inject=async route=>{const response=await route.fetch();await route.fulfill({response,body:await response.text()+`\nwindow.__localQA={createBlankProject,openLiteratureDiscoveryWindow,openDeepReadWindow,localRequest,setView,renderInspector,show(node){selectedNode=node;renderInspector(node);render();},select(ids){selectedNode=null;selectedNodes=new Set(ids);render();},get importing(){return discoveryImporting},get nodes(){return nodes},get project(){return project},get history(){return discoveryHistory},configure(){aiConfig={endpoint:'https://fixture-model.invalid/v1',apiKey:'synthetic',model:'fixture',protocol:'openai-chat',verified:true};},seedRows(){const n=nodes[0];nodes.push(...Array.from({length:70},(_,i)=>({...n,id:'row-'+i,title:'Table paper '+i})));project.nodes=nodes;setView('table');}};`});};
+ const model=async route=>{
+  let user;try{user=JSON.parse(route.request().postDataJSON().messages.at(-1).content);}catch{await route.fulfill({json:{choices:[{message:{content:'The original reports improved response time and discusses limitations.'},finish_reason:'stop'}]}});return;}
+  const result={summary:'原文报告了反应时改善，研究限制应结合原文理解。',label:'反应时改善',keywords:['inhibition'],theory:{label:'反应抑制',labelEn:'Response inhibition'},relationships:user.peers.map(p=>({targetId:p.id,relation:'support',strength:.8,rationale:'Both originals report improvement.',sourceQuote:'improved response time',targetQuote:'improved response time'}))};
+  result.relationships.push({targetId:user.peers[0]?.id,relation:'support',strength:.8,rationale:'Unverified fixture',sourceQuote:'Fabricated evidence must never pass validation.',targetQuote:'improved response time'});
+  await route.fulfill({json:{choices:[{message:{content:JSON.stringify(result)},finish_reason:'stop'}]}});
+ };
+ const metadata=async route=>{const d=route.request().postDataJSON();await route.fulfill({json:{metadata:{title:d.title,doi:d.doi,authors:['A Example','B Example'],year:2024,language:'en',citations:12,journal:'Fixture journal',metadataSource:'Synthetic fixture',metadataRetrievedAt:'2026-01-01',referenceDois:d.doi.endsWith('2')?['10.1234/local1']:[],references:[],abstract:'A source-backed abstract.'}}});};
+ try {
+  await page.route(pattern,inject);await page.route('https://fixture-model.invalid/**',model);await page.route('**/__litgraph/metadata',metadata);
+  await page.reload();await page.waitForFunction(()=>window.__localQA);await page.setViewportSize({width:1600,height:1050});
+  if(await page.locator('html').getAttribute('lang')==='en')await page.locator('#language-button').click();
+  await page.evaluate(()=>{const q=window.__localQA;q.createBlankProject();q.configure();q.openLiteratureDiscoveryWindow();});
+  await page.waitForFunction(()=>document.querySelector('.discovery-window-body')?.getBoundingClientRect().width>100);
+  const initial=await page.locator('.discovery-conditions').evaluate(el=>el.getBoundingClientRect().width/el.parentElement.getBoundingClientRect().width);
+  assert(Math.abs(initial-.4)<.01,'Default split is not 40/60: '+initial);
+  const divider=await page.locator('.discovery-divider').boundingBox();
+  await page.mouse.move(divider.x,divider.y+50);await page.mouse.down();await page.mouse.move(divider.x+100,divider.y+50);await page.mouse.up();
+  assert(Number(await page.locator('.discovery-divider').getAttribute('aria-valuenow'))>40,'Divider did not resize');
+  await page.locator('.discovery-divider').focus();await page.keyboard.press('Home');
+  await page.screenshot({path:'output/playwright/discovery-split-default.png'});
+  await page.locator('#add-papers-button').click();
+  await page.evaluate(()=>{
+   const pdf=i=>{
+    const stream='BT /F1 12 Tf 40 700 Td (DOI: 10.1234/local'+i+' The intervention improved response time in the experimental group. Original evidence supports the findings.) Tj ET';
+    const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>','<< /Length '+stream.length+' >>\nstream\n'+stream+'\nendstream'];
+    let text='%PDF-1.4\n',offsets=[];objects.forEach((o,i)=>{offsets.push(text.length);text+=(i+1)+' 0 obj\n'+o+'\nendobj\n';});
+    const pos=text.length;text+='xref\n0 6\n0000000000 65535 f \n'+offsets.map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+pos+'\n%%EOF';return text;
+   };
+   // A complete transfer with invalid internals exercises conversion failure;
+   // genuinely truncated downloads are rejected earlier by the retrieval core.
+   const dt=new DataTransfer();dt.items.add(new File(['%PDF-1.4\nThis is deliberately corrupt.\n%%EOF'],'broken-fixture.pdf',{type:'application/pdf'}));
+   for(const i of [1,2])dt.items.add(new File([pdf(i)],'local-study-'+i+'.pdf',{type:'application/pdf'}));
+   const input=document.querySelector('#document-input');input.files=dt.files;input.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  await page.locator('#start-paper-import').click();
+  await page.locator('#close-literature-discovery').click();
+  await page.waitForFunction(()=>!window.__localQA.importing && window.__localQA.history[0]?.items.length===3,null,{timeout:60000});
+  const state=await page.evaluate(()=>({job:window.__localQA.history[0],nodes:window.__localQA.nodes,project:window.__localQA.project}));
+  assert(state.job.items.filter(i=>i.stage==='done').length===2,'Valid PDFs failed: '+JSON.stringify(state.job));
+  assert(state.job.items[0].stage==='error'&&state.job.items[0].attempt===1,'Bad PDF was not skipped after one attempt');
+  assert(state.nodes.every(n=>n.originalRelativePath),'Source file lost after conversion error');
+  assert(state.nodes.slice(1).every(n=>n.markdownRelativePath&&n.analysisStatus==='done'&&n.citations===12&&n.primaryTheory!=='unclassified'),'Manual import not fully processed');
+  assert(state.project.citationLinks.length>=1&&state.project.semanticLinks.length>=1,'Citation or evidence-backed relations missing');
+  assert(state.nodes.slice(1).every(n=>n.analysisWarnings.length===1),'Rejected relation should be a warning, not whole-paper failure');
+  await page.locator('#add-papers-button').click();await page.locator('#paper-import-history-toggle').click();
+  assert(await page.locator('#paper-import-history .history-row-progress').isVisible(),'Import dialog history missing progress');
+  assert(await page.locator('#paper-import-history .history-details').isHidden(),'Import history details should be collapsed');
+  await page.locator('#paper-import-modal [data-close-modal="paper-import"]').first().click();
+  await page.evaluate(()=>window.__localQA.openLiteratureDiscoveryWindow());await page.locator('#discovery-history-toggle').click();
+  assert(await page.locator('#discovery-history-toggle').getAttribute('aria-pressed')==='true','History active state missing');
+  const closed=await page.locator('.discovery-history-row').first().boundingBox();assert(closed.height<145,'Collapsed history too tall');
+  assert(await page.locator('.history-row-progress').first().isVisible(),'Collapsed row hid progress');
+  assert(await page.locator('.history-details').first().isHidden(),'Paper details should start collapsed');
+  await page.locator('[data-history-expand]').first().click();
+  assert((await page.locator('.history-report').first().innerText()).includes('失败 1'),'Final failure report missing');
+  await page.screenshot({path:'output/playwright/import-skipped-report.png'});
+  await page.locator('#language-button').click();
+  const english=await page.locator('.discovery-history').innerText();
+  assert(!/[\u3400-\u9fff]/.test(english),'History English mode contains untranslated UI: '+english);
+  assert((await page.locator('#add-papers-button').innerText()).includes('Add papers'),'Add papers did not switch language');
+  await page.screenshot({path:'output/playwright/import-history-local-english.png'});
+  await page.locator('#language-button').click();
+  await page.locator('#close-literature-discovery').click();
+  await page.evaluate(()=>window.__localQA.openDeepReadWindow(window.__localQA.nodes[1]));
+  assert(await page.locator('.research-composer-help').count()===0,'Composer hint still present');
+  const box=await page.locator('.deep-read-form').boundingBox();assert(box.height<=125,'Two-row composer too tall: '+box.height);
+  const inputBox=await page.locator('.research-composer-input').boundingBox(),toolbarBox=await page.locator('.research-composer-row').boundingBox();
+  assert(inputBox.height<=48&&inputBox.y+inputBox.height<=toolbarBox.y,'Writing row must be compact and above the toolbar');
+  const centers=await page.locator('.research-composer-row > *').evaluateAll(els=>els.map(el=>{const r=el.getBoundingClientRect();return r.y+r.height/2;}));
+  assert(Math.max(...centers)-Math.min(...centers)<3,'Composer components are not centered');
+  await page.screenshot({path:'output/playwright/research-compact-composer.png'});
+  await page.evaluate(()=>document.querySelector('.deep-read-window').remove());
+  await page.evaluate(()=>window.__localQA.seedRows());
+  await page.locator('.data-table-wrap').evaluate(el=>{el.scrollTop=650;el.scrollLeft=100;});
+  const before=await page.locator('.data-table-wrap').evaluate(el=>el.scrollTop);
+  await page.locator('[data-select-record="row-30"]').evaluate(el=>{el.checked=true;el.dispatchEvent(new Event('change',{bubbles:true}));});
+  assert(await page.locator('.data-table-wrap').evaluate(el=>el.scrollTop)===before,'Selecting a row reset table scroll');
+  await page.locator('#language-button').click();
+  await page.getByRole('button',{name:'Settings',exact:true}).click();
+  const feedback=page.getByRole('link',{name:/User feedback/});
+  assert(await feedback.getAttribute('href')==='https://my.feishu.cn/share/base/form/shrcnbw8bQOlnsv8EXdKFaXnoIy','Feedback entry missing');
+  await page.evaluate(()=>window.__localQA.setView('semantic'));
+  await page.getByRole('button',{name:'Filters',exact:true}).click();
+  const fonts=await page.evaluate(()=>['#journal-filter > summary','#fulltext-filter'].map(s=>{const c=getComputedStyle(document.querySelector(s));return {size:c.fontSize,family:c.fontFamily};}));
+  assert(fonts[0].size===fonts[1].size&&fonts[0].family===fonts[1].family,'Journal dropdown typography differs');
+  await page.locator('#journal-filter > summary').click();
+  await page.screenshot({path:'output/playwright/journal-select-english.png'});
+  await page.locator('#add-papers-button').click();
+  assert((await page.locator('#paper-import-modal').innerText()).includes('Supports PDF, Markdown, TXT, LaTeX, CSV and JSON'),'File import copy not translated');
+  await page.locator('#paper-import-modal [data-close-modal="paper-import"]').first().click();
+  await page.evaluate(()=>window.__localQA.show(window.__localQA.nodes[1]));
+  assert(await page.locator('#process-paper-button').count()===0,'Completed analysis button should be hidden');
+  const nBefore=await page.evaluate(()=>window.__localQA.nodes.length);
+  await page.locator('#delete-inspector-paper').click();
+  assert(await page.evaluate(()=>window.__localQA.nodes.length)===nBefore-1,'Single-paper deletion failed');
+  await page.evaluate(()=>window.__localQA.select(window.__localQA.nodes.slice(0,2).map(n=>n.id)));
+  await page.locator('#delete-papers-button').click();await page.locator('[data-delete-cancel]').click();
+  assert(await page.evaluate(()=>window.__localQA.nodes.length)===nBefore-1,'Cancel removed papers');
+  await page.locator('#delete-papers-button').click();await page.locator('[data-delete-confirm]').click();
+  assert(await page.evaluate(()=>window.__localQA.nodes.length)===nBefore-3,'Multi-paper deletion failed');
+  assert(await page.locator('#delete-papers-button').isDisabled(),'Delete not disabled for no selection');
+  assert(errors.length===0,'Page errors: '+errors.join('; '));
+  return {passed:true,checks:['40/60 split and drag','local PDF preserved on error','one attempt then skip','background completion after window close','MD, metadata, summary, classification, citation and semantic edges','collapsed history and report','compact centered composer','table selection scroll']};
+ } finally {
+  await page.unroute(pattern,inject);await page.unroute('https://fixture-model.invalid/**',model);await page.unroute('**/__litgraph/metadata',metadata);
+  await page.evaluate(async saved=>{if(window.__localQA)await window.__localQA.localRequest('discovery-history',{jobs:JSON.parse(saved['litgraph.discoveryHistory.v1']||'[]')});localStorage.clear();Object.entries(saved).forEach(([k,v])=>localStorage.setItem(k,v));},backup);
+  await page.reload();
+ }
+}

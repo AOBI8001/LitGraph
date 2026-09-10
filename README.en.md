@@ -10,7 +10,9 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.0 · Windows 10 / 11 x64 · MIT licensed**
+**1.1.8 · Windows 10 / 11 x64 · MIT licensed**
+
+> This page describes the 1.1.8 source. Downloadable installer versions are listed in Releases.
 
 [Download](https://github.com/AOBI8001/LitGraph/releases/latest) · [Website](https://litgraph.aobi.qzz.io/) · [Feedback](https://github.com/AOBI8001/LitGraph/issues)
 
@@ -33,12 +35,12 @@ See the relationships in the graph. Investigate them in conversation. Your paper
 ### Install
 
 1. Open [GitHub Releases](https://github.com/AOBI8001/LitGraph/releases/latest).
-2. Download `LitGraph-Setup-1.0.0-x64.exe` from the release assets.
+2. Download `LitGraph-Setup-<version>-x64.exe` from the release assets.
 3. Run the installer, choose an installation location, and open LitGraph.
 
 The installer includes the application runtime; no separate Node.js or Python installation is required. Windows x64 is the currently distributed platform. LitGraph is free to use. Model usage charges and subscription access are governed by the providers you choose.
 
-> ⚠️ **Installation notice:** Version 1.0 is unsigned. Windows may display an unknown-publisher or SmartScreen warning. Use the files published in this repository and compare the installer checksum with `SHA256SUMS.txt` from the same release. Keep system security protections enabled.
+> ⚠️ **Installation notice:** Official installers are unsigned. Windows may display an unknown-publisher or SmartScreen warning. Use the files published in this repository and compare the installer checksum with `SHA256SUMS.txt` from the same release. Keep system security protections enabled.
 
 ### Your first project
 
@@ -77,15 +79,15 @@ Available conditions include:
 - **Year range:** Enter inclusive start and end years.
 - **Language:** Any, English, or Chinese.
 - **Article type:** Any, meta-analysis, review, research, or conference.
-- **Access source:** Open access or institution login.
+- **Access source:** Open access, Open + institution (beta), or Institution sign-in (beta), in that order.
 - **Search count:** 5, 10, 20, 50, 100, or a custom integer from 5–100; the default is 20.
 - **Sorting:** Combined, relevance, newest, or citations.
 
-The count is a target number of candidate records. Filters, source coverage, and network availability determine how many can actually be retrieved. The interface reports the actual result count. Combined and relevance sorting currently both use AI relevance scores.
+The count is a target number of candidate records. Filters, source coverage, and network availability determine how many can actually be retrieved. The interface reports the actual result count. Combined sorting uses keyword matching and source ranking.
 
-### Real sources, with AI assessment
+### Real sources and AI search planning
 
-The model turns your research intent into search terms. LitGraph retrieves records from scholarly sources, then asks the model to assess their relevance in batches. Authors, titles, DOIs, abstracts, and citation counts retain their source values; the model supplies relevance explanations.
+The original input is searched first. AI adds 2–3 English and 2–3 Chinese topic combinations, together with bilingual core subject terms. LitGraph retrieves real source records, checks title/abstract topic matches, filters, deduplicates and ranks them. Exact full-title matches have priority; unrelated papers are not used to fill the count. The completion area lists the channels used, and project history retains each query’s outcome and channel warnings. Authors, titles, DOIs, abstracts and citation counts retain their source values. Results are not sent for an extra AI critique.
 
 | Channel | Role in the workflow |
 | --- | --- |
@@ -93,21 +95,37 @@ The model turns your research intent into search terms. LitGraph retrieves recor
 | **Europe PMC** | Supplementary search and full-text leads |
 | **Crossref** | DOI metadata and reference enrichment |
 
-Results pass through filters and DOI/title-based deduplication, excluding papers already in the project. Records with an unconfirmed language or type cannot pass the corresponding strict filter. Chinese-language coverage depends on what these sources index; the institutional entry point guides authorized access.
+Results pass through filters and DOI/title-based deduplication, excluding papers already in the project. Records with an unconfirmed language or type cannot pass the corresponding strict filter. Chinese-language coverage depends on source indexing. Institution mode searches the saved library catalogue or publisher page in its existing signed-in session. Combined mode merges public-source and institution-page results. The browser icon in the discovery header opens the existing institution window.
 
 ### Review, acquire, and link originals
 
-Inspect the sources, relevance explanations, and access status, select the papers you want, and confirm acquisition and import. Candidates enter the project only after confirmation.
+Inspect the sources and access status, select the papers you want, and confirm acquisition and import. Candidates enter the project only after confirmation.
 
 For each selected paper, the application performs the available steps:
 
 1. Enrich the complete available author list, journal, year, DOI, abstract, and references.
-2. Acquire a lawfully available open PDF and save the original.
+2. Acquire a lawful open PDF first. In institution or combined mode, try the existing authenticated browser session when an open original is unavailable, then save the original.
 3. Extract readable text into a Markdown index with physical PDF page markers.
 4. Bind the original and index to the paper node, connecting the Original action and Research space to the same material.
 5. Match source reference identifiers against papers in the project to establish citation edges.
+6. Generate a summary, subject classification, and support/opposition/related edges grounded in both supplied original texts, then update the canvas.
 
-A failed acquisition preserves the bibliographic record and its status while other papers continue. Stopping an import keeps completed work. Restricted originals can be obtained through an authorized institutional route and added to the research materials afterward.
+A failed acquisition preserves the bibliographic record and its status while other papers continue. Pause and resume unfinished stages without redownloading saved PDFs or reconverting saved Markdown. Editing filters preserves current results; Start search creates a new search. The history button tracks acquisition, Markdown conversion and analysis separately, including after a restart. Convert locally and analyze in the paper details retries one paper independently.
+
+Original opens in the default Windows application, with the system application picker when no association exists. LitGraph does not embed a PDF reader. Obtain restricted originals through an authorized institutional route and add them afterward. Unrestricted-language searches prioritize English, supplementing other languages when English sources are insufficient.
+
+### Institution access beta and automatic skipping
+
+Institution features are in testing. Signing in does not imply a subscription to every paper or compatibility with every catalogue, proxy or publisher.
+
+1. Select institution or combined mode and enter a publisher, institution or library URL.
+2. Complete sign-in and any manual verification in the built-in browser, then select **Save session & close**.
+3. Search and acquisition reuse that browser session. Cookies are never provided to AI.
+4. If verification returns during acquisition, the window is brought forward and automation pauses. Save after completing verification; the stable article resumes without a reload.
+5. **Each paper has a cumulative two-minute manual-wait budget.** Expiry skips that paper; an explicitly detected site block skips it immediately. The queue advances, history records the reason, and saved PDFs, Markdown and analyses are retained.
+6. Choosing **Pause** yourself stops the batch; it is distinct from automatic skipping. Resume from history later or supply an authorized original.
+
+Institution search also has a two-minute manual verification limit, after which that channel ends with existing results retained. Combined search keeps completed public results. Session expiry, IP restrictions, verification and subscription entitlement remain controlled by the website.
 
 ### Understand the bibliographic fields
 
@@ -197,18 +215,18 @@ Both preferences follow the same evidence requirements. They adjust context budg
 
 ### Option 1: External Agent
 
-Use an existing Codex, Claude, or other Agent environment. LitGraph provides MCP connection instructions and a bundled adapter, with one shared task contract for compatible Agents.
+Use your Codex CLI or Claude Code account. The desktop app starts independent tasks on demand for search planning, imported-paper analysis and research questions. Processes exit after completion; no persistent chat task is required.
 
-1. Open Model connection and copy the external Agent connection text.
-2. Send it to your Agent and follow the MCP setup instructions. The client may require a tool reload or a new session.
-3. A successful handshake produces a connection confirmation in LitGraph.
-4. Keep the Agent's task-processing session running while using Literature discovery and Research space.
+1. Install the official native Codex CLI or Claude Code and sign in once in that tool.
+2. In Model connection, choose the tool and select Connect & verify. Use Choose executable if automatic detection fails.
+3. After verification, search, analyze and ask questions in LitGraph using that tool's account quota.
+4. Restarting LitGraph reuses your selection and CLI login. If authentication expires, sign in again and reconnect.
 
-The connection text includes session-specific addresses, runtime settings, and credentials. Share it only with an Agent you trust. Integration depends on the external tool supporting configuration and ongoing task processing.
+LitGraph does not take over existing conversations or copy CLI credentials. Network availability, quotas and CLI versions still affect execution. The current on-demand path accepts text only. See [on-demand agent execution](docs/on-demand-agent.md). Other clients can use the advanced manual MCP option if they support ongoing task processing.
 
 ### How MCP coordinates the work
 
-MCP connects the product interface to the external Agent's task loop. LitGraph prepares questions, evidence, and structured requirements; the Agent claims tasks and submits results; the application validates and displays them.
+Manual MCP is a separate compatibility path: LitGraph prepares questions, evidence and structured requirements; the external client continuously claims tasks and submits results; the application validates and displays them. The following loop does not apply to on-demand CLI execution above.
 
 | Tool | Responsibility |
 | --- | --- |
@@ -226,7 +244,7 @@ Call a model directly from the product. Enter the service address, API key, and 
 
 Supported protocols include OpenAI-compatible Chat Completions, OpenAI Responses, and Anthropic Messages. Services implementing those protocols can be configured; model availability, permissions, and quotas are controlled by each provider.
 
-LitGraph supplies scholarly search, acquisition, text conversion, and file association. The model supplies search planning, relevance assessment, and research answers. API mode supports the same workflow, with model configuration encrypted using operating-system facilities.
+LitGraph supplies scholarly search, acquisition, text conversion, and file association. The model supplies search planning, original-paper analysis, and research answers. API mode supports the same workflow, with model configuration encrypted using operating-system facilities.
 
 <a name="algorithms"></a>
 
@@ -273,7 +291,7 @@ Graph text vectors organize the collection spatially. Research answers use the s
 - **Lightweight hover:** Hover updates paper hints, reserving selection and connection-state changes for clicks.
 - **On-demand resources:** 3D resources load when needed, while cached background artwork reduces repeated preparation.
 - **Initial framing:** The 3D graph fits model bounds to the viewport on first entry, stopping automatic adjustments when the user takes control.
-- **Bounded retrieval:** Candidate limits, pagination bounds, and finite retries contain work; relevance assessment is batched to reduce per-request pressure.
+- **Bounded retrieval:** Candidate limits, pagination bounds, and finite retries contain work; source-ranked results display without additional model calls.
 - **Reusable originals:** Saved originals and Markdown indexes can be read again in later conversations.
 - **Context allocation:** Per-paper evidence allocation and length limits balance comparison coverage with model cost.
 - **Request isolation:** Cancelled, expired, or late results from earlier tasks cannot overwrite a newer request.
@@ -284,7 +302,7 @@ Projects, conversations, and saved originals primarily reside on your device. Mo
 
 Remote-model requests include the question, necessary metadata, relevant source excerpts, and attached materials. External Agent mode passes corresponding tasks to the Agent you choose. Consider your rights to use the papers and the provider's data policies when selecting a processing route.
 
-The official desktop app includes minimal usage reporting: a random installation ID, random event ID, launch/use type, and timestamp, used for first-use, active-installation, and operation counts. Events contain no papers, conversations, API keys, file paths, or hardware identifiers. Reporting can be disabled in Settings → About LitGraph. See [Privacy](PRIVACY.md).
+The official desktop app includes minimal usage reporting: a random installation ID, random event ID, launch/use type, and timestamp, used for first-use, active-installation, and operation counts. Events contain no papers, conversations, API keys, file paths, or hardware identifiers. A disabled preference saved by an earlier version remains effective. See [Privacy](PRIVACY.md).
 
 Back up the project together with associated originals and indexes. Normal uninstallation preserves user data; migration to another device may require model credentials to be configured again. Updates are currently installed by downloading a newer installer.
 
@@ -296,7 +314,7 @@ Searchable metadata and downloadable full text have different access conditions.
 
 ### Does entering an institutional library URL grant subscription access?
 
-The institutional entry point provides access guidance. The current version does not share browser cookies. Restricted originals must be obtained through an authorized institutional route; connecting an API or Agent does not expand subscription rights.
+Saving a library URL opens a separate institution browser window in the desktop app. Complete sign-in and verification there; saving the URL is not a successful login. LitGraph tries open-access full text first, then uses that session for authorized originals. When manual steps are needed, download the PDF on the institution page; LitGraph receives it and continues conversion and analysis. Sessions stay on this device and are never given to models or Agents. VPN requirements and platform restrictions may require user action; API or Agent access does not expand subscription rights.
 
 ### Why does an answer mention abstract-only evidence?
 

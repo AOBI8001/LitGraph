@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFile} from 'node:fs/promises';
-import worker,{validateEvent,recordEvent,installHash} from '../cloudflare/metrics/worker.js';
+import worker,{validateEvent,recordEvent,installHash,retentionCohorts,retentionQuery} from '../cloudflare/metrics/worker.js';
 const sqlite=new DatabaseSync(':memory:');sqlite.exec(await readFile(new URL('../cloudflare/metrics/schema.sql',import.meta.url),'utf8'));
 const db={prepare(sql){return {bind(...args){this.args=args;return this;},async first(){return sqlite.prepare(sql).get(...(this.args||[]));},async all(){return {results:sqlite.prepare(sql).all(...(this.args||[]))};},async run(){return sqlite.prepare(sql).run(...(this.args||[]));}};},async batch(statements){sqlite.exec('BEGIN');try{for(const s of statements)await s.run();sqlite.exec('COMMIT');}catch(e){sqlite.exec('ROLLBACK');throw e;}}};
 const body={installId:crypto.randomUUID(),eventId:crypto.randomUUID(),type:'launch',occurredAt:new Date().toISOString()};
@@ -18,4 +18,27 @@ assert.throws(()=>validateEvent({...body,occurredAt:new Date(0).toISOString()}))
 assert.notEqual(await installHash(body.installId,'test-only-salt'),body.installId);
 const raw=JSON.stringify(sqlite.prepare('SELECT * FROM installations').all());assert.ok(!raw.includes(body.installId));
 console.log('Metrics: private stats, installation hashing, per-day deduplication, separate launch/use counters, retries and payload minimization passed.');
+// Exact-day usage retention: launches alone and usage on neighboring days do not count.
+const event=(hash,day,type='use')=>recordEvent(db,{eventId:crypto.randomUUID(),day,type},hash);
+await event('cohort-a','2020-01-01','launch');
+await event('cohort-b','2020-01-01','launch');
+await event('cohort-c','2020-01-01','launch');
+await event('cohort-a','2020-01-02');await event('cohort-a','2020-01-02');
+await event('cohort-b','2020-01-02','launch');
+await event('cohort-a','2020-01-08');await event('cohort-b','2020-01-07');
+await event('cohort-c','2020-01-31');
+const cohortRows=(await db.prepare(retentionQuery).bind('2020-01-01').all()).results.filter(r=>r.cohort==='2020-01-01');
+const mature=retentionCohorts(cohortRows,'2020-02-01')[0];
+assert.equal(mature.installs,3);
+for(const day of [1,7,30]){assert.equal(mature['day'+day].count,1);assert.equal(mature['day'+day].rate,1/3);}
+const pending=retentionCohorts(cohortRows,'2020-01-02')[0];
+assert.equal(pending.day1.provisional,true);assert.equal(pending.day7.count,null);assert.equal(pending.day30.rate,null);
+// Late offline first launch corrects the cohort, without double counting a retry.
+await event('late','2020-03-03');await event('late','2020-03-01','launch');
+assert.equal(sqlite.prepare('SELECT first_day FROM installations WHERE install_hash=?').get('late').first_day,'2020-03-01');
+const repeated={eventId:crypto.randomUUID(),day:'2020-03-03',type:'use'};
+await recordEvent(db,repeated,'late');await recordEvent(db,{...repeated,day:'1990-01-01'},'late');
+assert.equal(sqlite.prepare('SELECT first_day FROM installations WHERE install_hash=?').get('late').first_day,'2020-03-01');
+assert.equal(stats.retention[0].day30.mature,false);
+console.log('Retention: exact day 1/7/30 core usage, cohort denominator, per-install deduplication, observation maturity and late offline events passed.');
 sqlite.close();

@@ -18,7 +18,10 @@ for (const folder of await readdir('node_modules/.pnpm')) {
   try { const manifest = JSON.parse(await readFile(path.join(directory, 'package.json'))); if (!all.has(manifest.name)) all.set(manifest.name, { manifest, directory }); } catch {}
  }
 }
-const queue = ['d3', '3d-force-graph', 'three', 'three-spritetext', 'pdfjs-dist'], seen = new Set(), index = [];
+const queue = ['d3', '3d-force-graph', 'three', 'three-spritetext', 'pdfjs-dist', 'marked', 'dompurify'], seen = new Set(), index = [];
+// Acquisition is packaged as native JS plus the pinned WebVPN registry. Fail
+// before packaging if a required implementation or attribution file is missing.
+for (const file of ['scripts/acquisition-core.js', 'scripts/institution-routing.js', 'scripts/scansci-service.js', 'desktop/browser-pdf.mjs', 'desktop/institution-search.mjs', 'desktop/institution-dom.mjs', 'desktop/institution-fulltext.mjs', 'vendor/scansci/webvpn.json', 'vendor/scansci/LICENSE', 'vendor/scansci/SOURCE.md']) await readFile(file);
 // Prefer the installed direct dependency over stale pnpm cache versions.
 for (const name of queue) {
  const directory = path.join('node_modules', name);
@@ -37,5 +40,7 @@ while (queue.length) {
  }
  queue.push(...Object.keys(manifest.dependencies || {}));
 }
+for (const file of ['LICENSE', 'SOURCE.md']) await writeFile(path.join('dist/third-party-licenses', 'scansci-pdf-' + file), await readFile(path.join('vendor/scansci', file)));
+index.push({name:'scansci-pdf WebVPN registry and adapted URL routing',revision:'c7022a8000d266442c260623cf8b12b63b10c1e3',license:'Apache-2.0',source:'https://github.com/Rimagination/scansci-pdf'});
 await writeFile('dist/third-party-licenses/index.json', JSON.stringify(index, null, 2));
 console.log(`Desktop icon and notices for ${index.length} bundled dependency packages prepared.`);

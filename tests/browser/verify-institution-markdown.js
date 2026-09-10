@@ -1,0 +1,33 @@
+async page => {
+ const assert=(value,message)=>{if(!value)throw Error(message);};
+ const pattern='**/src/main.js*';
+ const inject=async route=>{const response=await route.fetch();await route.fulfill({response,body:await response.text()+`\nwindow.__institutionQA={openModal,openLiteratureDiscoveryWindow,closeLiteratureDiscoveryWindow,closeResearchWindow,setLanguage(value){language=value;applyLanguage();},seed(text){openDeepReadWindow();const key=researchTabChatKey(researchTabs.find(t=>t.id===activeResearchTabId));localStorage.setItem(key,JSON.stringify([{role:'user',text:'**literal question**'},{role:'assistant',status:'done',text}]));renderResearchDesk();}};`});};
+ await page.route(pattern,inject);await page.reload();await page.waitForFunction(()=>window.__institutionQA);
+ await page.setViewportSize({width:1500,height:1000});
+ const text='## Evidence overview\n\nThe result is **clearly stated**, with *important limitations*.\n\n- First finding\n- Second finding\n\n| Method | Result |\n| --- | --- |\n| Comparison | Consistent |\n\n> AI inference: a possible explanation, not a source claim.\n\n`code example`\n\n[Source](https://example.org/paper)\n\n<img src=x onerror="window.__unsafe=1"><script>window.__unsafe=2</script><a href="javascript:alert(1)">unsafe link</a>';
+ await page.evaluate(text=>window.__institutionQA.seed(text),text);
+ const answer=page.locator('.deep-read-window .message-markdown');
+ assert(await answer.locator('strong').innerText()==='clearly stated','Bold not rendered');
+ assert(await answer.locator('table').count()===1,'Table not rendered');
+ assert(await answer.locator('li').count()===2,'List not rendered');
+ assert(await answer.locator('img,script,iframe,[onerror],a[href^="javascript:"]').count()===0,'Unsafe HTML survived');
+ assert(await page.evaluate(()=>window.__unsafe)===undefined,'Unsafe HTML executed');
+ assert(await answer.locator('a[href]').getAttribute('rel')==='noopener noreferrer','External link isolation missing');
+ assert(await page.locator('.chat-turn.user p').innerText()==='**literal question**','User text must stay literal');
+ assert(await answer.locator('p').first().evaluate(e=>getComputedStyle(e).whiteSpace)==='normal','Markdown inherited plain-text spacing');
+ await page.screenshot({path:'output/playwright/research-markdown-104.png'});
+ await page.evaluate(()=>{window.__institutionQA.closeResearchWindow();window.__institutionQA.openLiteratureDiscoveryWindow();});
+ const sources=page.locator('[data-discovery-field="source"]');
+ const sourceValues=await page.locator('[data-discovery-value="institution"], [data-discovery-value="open"]').evaluateAll(es=>es.map(e=>e.dataset.discoveryValue));
+ assert(sourceValues.join(',')==='institution,open','Institution must come first');
+ await page.screenshot({path:'output/playwright/discovery-sources-104.png'});
+ await page.locator('[data-discovery-value="institution"]').click();
+ assert(/在打开的页面中登陆机构账号/.test(await page.locator('.discovery-institution-popover').innerText()),'Login guidance missing');
+ await page.evaluate(()=>{window.__institutionQA.closeLiteratureDiscoveryWindow();window.__institutionQA.openModal('about');});
+ assert((await page.locator('#about-modal').innerText()).includes('二维与三维图谱'),'Expanded About text missing');
+ await page.evaluate(()=>window.__institutionQA.setLanguage('en'));
+ assert(!/[\u4e00-\u9fff]/.test(await page.locator('#about-modal').innerText()),'About contains untranslated Chinese');
+ await page.screenshot({path:'output/playwright/about-en-104.png'});
+ await page.unroute(pattern,inject);
+ return {passed:true,checks:['safe Markdown','bold/list/table/code','literal user text','source order','institution guidance','English About']};
+}

@@ -10,19 +10,26 @@ import {
   interpolateRgb
 } from 'd3';
 import sampleProjectSource from 'virtual:litgraph-sample';
+import { version as APP_VERSION } from '../package.json';
 import { initialWorkspace } from './startup-project.js';
+import { preferenceKeys } from './settings-reset.js';
 import './styles.css';
 import { mountResearchWindow } from './floating-research-window.js';
-import { COUNT_OPTIONS, discoveryCount, planningMessages, normalizePlan, analysisMessages, applyAssessments, titleKey } from './discovery-contract.js';
+import { COUNT_OPTIONS, discoveryCount, planningMessages, normalizePlan, titleKey, cleanDoi, usesInstitution } from './discovery-contract.js';
 import { capture2dFraming, match2dFraming } from './camera-framing.js';
 import { closerCamera, navigationKeys, translateCamera } from './camera-navigation.js';
 import { framePerspectiveModel, initialFramingPoints } from './perspective-framing.js';
 import { readAIResponse, researchTokenBudget } from './ai-response.js';
-import { normalizeResearchMode, researchModePolicy, researchThinkingOptions } from './research-mode.js';
+import { normalizeResearchMode, researchModePolicy, researchThinkingOptions, compatibleModelBody } from './research-mode.js';
 import { researchMessages } from './research-agent.js';
 import { ResearchRequest, formatResearchDuration } from './research-request.js';
-import { externalState, refreshExternal, externalInstructions, externalCompletion, localRequest } from './external-agent.js';
-import { extractFile, saveFulltext, prepareEvidence, imageAttachment, withImages, originalBlob } from './fulltext.js';
+import { externalState, refreshExternal, externalInstructions, externalCompletion, localRequest, copyTextToClipboard } from './external-agent.js';
+import { extractFile, saveFulltext, saveOriginalFile, prepareEvidence, imageAttachment, withImages, originalBlob, getFulltext } from './fulltext.js';
+import { HISTORY_KEY, restoreJobs, createImportJob, jobCounts, moveTab, processImportItem, processImportBatch } from './import-jobs.js';
+import { paperAnalysisMessages, validatePaperAnalysis } from './paper-analysis.js';
+import { shouldRefreshLocalMetadata } from './local-metadata.js';
+import { messageMarkdown } from './message-markdown.js';
+import { selectEvidence } from './research-evidence.js';
 import { validateEvidenceAnswer } from './research-evidence.js';
 import { linkMatchesSelection } from './graph-focus.js';
 import { CANVAS_BACKGROUNDS, backgroundPreset, backgroundArtwork } from './canvas-backgrounds.js';
@@ -50,6 +57,11 @@ const PALETTES = {
   p5: ['#e41a1c', '#377eb8', '#4daf4a', '#984ea3', '#ff7f00', '#ffff33', '#a65628', '#f781bf']
 };
 const MODEL_CATALOG = {
+  'gpt-6-astra': { provider: 'openai', endpoint: 'https://api.openai.com/v1', protocol: 'openai-responses' },
+  'claude-fable-5-1': { provider: 'anthropic', endpoint: 'https://api.anthropic.com/v1', protocol: 'anthropic-messages' },
+  'kimi-k2.7-code': { provider: 'moonshot', endpoint: 'https://api.moonshot.cn/v1', protocol: 'openai-chat' },
+  'glm-5.3': { provider: 'zhipu', endpoint: 'https://open.bigmodel.cn/api/paas/v4', protocol: 'openai-chat' },
+  'glm-5.3-flash': { provider: 'zhipu', endpoint: 'https://open.bigmodel.cn/api/paas/v4', protocol: 'openai-chat' },
   'gpt-5.6-sol': { provider: 'openai', endpoint: 'https://api.openai.com/v1', protocol: 'openai-responses' },
   'gpt-5.6-terra': { provider: 'openai', endpoint: 'https://api.openai.com/v1', protocol: 'openai-responses' },
   'gpt-5.6-luna': { provider: 'openai', endpoint: 'https://api.openai.com/v1', protocol: 'openai-responses' },
@@ -71,14 +83,17 @@ const MODEL_CATALOG = {
   'doubao-seed-evolving': { provider: 'doubao', endpoint: 'https://ark.cn-beijing.volces.com/api/v3', protocol: 'openai-chat' }
 };
 const MODEL_GROUPS = [
-  ['OpenAI', ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5']],
-  ['Anthropic', ['claude-fable-5', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5-20251001']],
-  ['Kimi', ['kimi-k3', 'kimi-k2.6']],
+  ['OpenAI', ['gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-5.5']],
+  ['Anthropic', ['claude-fable-5-1', 'claude-fable-5', 'claude-opus-5', 'claude-sonnet-5', 'claude-haiku-4-5-20251001']],
+  ['Kimi', ['kimi-k3', 'kimi-k2.6', 'kimi-k2.7-code']],
+  ['Zhipu / GLM', ['glm-5.3', 'glm-5.3-flash']],
   ['Qwen', ['qwen3.8-max', 'qwen3.7-plus', 'qwen3.7-flash', 'qwen3-coder-next']],
   ['DeepSeek', ['deepseek-v4-pro', 'deepseek-v4-flash']],
   ['Doubao', ['doubao-seed-2-1-pro-260628', 'doubao-seed-2-1-turbo', 'doubao-seed-evolving']]
 ];
 const MODEL_NAMES = {
+  'gpt-6-astra': 'GPT-6 Astra', 'claude-fable-5-1': 'Claude Fable 5.1',
+  'kimi-k2.7-code': 'Kimi K2.7 Code', 'glm-5.3': 'GLM-5.3', 'glm-5.3-flash': 'GLM-5.3-Flash',
   'gpt-5.6-sol': 'GPT-5.6 Sol', 'gpt-5.6-terra': 'GPT-5.6 Terra', 'gpt-5.6-luna': 'GPT-5.6 Luna', 'gpt-5.5': 'GPT-5.5',
   'claude-fable-5': 'Claude Fable 5', 'claude-opus-5': 'Claude Opus 5', 'claude-sonnet-5': 'Claude Sonnet 5', 'claude-haiku-4-5-20251001': 'Claude Haiku 4.5',
   'kimi-k3': 'Kimi K3', 'kimi-k2.6': 'Kimi K2.6',
@@ -147,7 +162,7 @@ app.innerHTML = `
         <span class="local-badge" id="model-badge" role="status" aria-live="polite"><i></i><span id="model-badge-label" data-i18n="local">本地 Demo</span></span>
       </div>
       <input id="file-input" type="file" accept="application/json,.json" hidden />
-      <input id="document-input" type="file" accept=".pdf,.doc,.docx,.txt,.md,.rtf,.html,.htm,.epub,.odt,.tex,.csv,.json" multiple hidden />
+      <input id="document-input" type="file" accept=".pdf,.txt,.md,.tex,.csv,.json" multiple hidden />
     </header>
     <section class="workspace" id="workspace">
       <aside class="sidebar" aria-label="图谱控制">
@@ -222,6 +237,7 @@ app.innerHTML = `
             <button id="multi-select-button" type="button" title="自由多选" aria-label="自由多选" aria-pressed="false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m4.5 10.5 3 3 5.2-6"/><path d="m10.5 15.2 3 3 6-7"/></svg></button>
             <button id="box-select-button" type="button" title="框选论文" aria-label="框选论文" aria-pressed="false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-dasharray="3 2"><rect x="4" y="4" width="16" height="16" rx="1"/></svg></button>
             <button id="lock-button" type="button" title="锁定节点位置" aria-label="锁定节点位置" aria-pressed="false"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></button>
+            <button id="delete-papers-button" type="button" title="删除选中文献" aria-label="删除选中文献" disabled><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/></svg></button>
           </div>
           <div class="tool-stack zoom-stack">
             <button id="zoom-in-button" type="button" title="放大" aria-label="放大"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5M7.5 10.5h6M10.5 7.5v6"/></svg></button>
@@ -245,7 +261,7 @@ app.innerHTML = `
         <aside class="inspector" id="inspector" aria-live="polite"><div class="inspector-resizer" id="inspector-resizer" role="separator" aria-label="调整详情栏宽度"></div></aside>
         <section class="data-view" id="data-view" hidden></section>
         <div class="floating-window-layer" id="floating-window-layer"></div>
-        <div class="drop-overlay" id="drop-overlay"><strong>拖入论文原文</strong><span>支持 PDF、Markdown、TXT、DOCX 和 RTF</span></div>
+        <div class="drop-overlay" id="drop-overlay"><strong>拖入论文原文</strong><span>支持 PDF、Markdown、TXT、LaTeX、CSV 与 JSON</span></div>
         <div class="empty-canvas" id="empty-canvas" hidden><div><strong>这是一个空白 LitGraph 项目</strong><p>选择一种方式开始构建你的论文图谱。</p><div class="empty-project-actions"><button id="empty-model-access" type="button"><span>模型接入</span><small>连接外部 Agent 或 API</small></button><button id="empty-sample-project" type="button"><span>样例数据</span><small>从示例开始探索</small></button><button id="empty-literature-discovery" type="button"><span>文献发现</span><small>按研究主题查找论文</small></button><button id="choose-documents-button" type="button"><span>选择论文文件</span><small>导入本地论文</small></button></div></div></div>
         <div class="node-edit-popover" id="node-edit-popover" hidden><label for="node-label-input">论文标签</label><input id="node-label-input" name="node-label" autocomplete="off"><button id="save-node-label" type="button">保存标签</button></div>
         <div class="tooltip" id="tooltip"></div>
@@ -256,16 +272,18 @@ app.innerHTML = `
     </section>
     <div class="modal-backdrop" id="api-modal" hidden>
       <section class="settings-dialog" role="dialog" aria-modal="true" aria-labelledby="api-dialog-title">
-        <header><div><h2 id="api-dialog-title">模型接入</h2><p>支持 OpenAI、Claude、Kimi、Qwen、DeepSeek 与豆包。密钥仅保存在当前设备。</p></div><button type="button" data-close-modal="api" aria-label="关闭">×</button></header>
+        <header><div><h2 id="api-dialog-title">模型接入</h2><p>连接外部 Agent 或模型 API，开始检索与研究。</p></div><button type="button" data-close-modal="api" aria-label="关闭">×</button></header>
         <form id="api-form">
           <section class="external-agent-section" aria-labelledby="external-agent-label">
-            <label id="external-agent-label">方式1：外部 Agent <span>Codex · Claude Code</span></label>
-            <div class="external-agent-row"><p>复制接入说明，发送给你的 Agent，并保持任务运行。</p><button id="copy-agent-instructions" type="button">复制文本</button></div>
-            <p class="external-agent-help">完成连接后，LitGraph 会自动弹窗确认。</p>
+            <h3 id="external-agent-label">方式1：外部 Agent <span>例如 Codex · Claude Code 等</span></h3>
+            <p class="external-agent-help">登录官方 Codex或 Claude Code。点击连结并验证。连接成功后，检索、论文分析和研究问答会按需调用。</p>
+            <div class="external-agent-row agent-runtime-controls"><select id="agent-runtime-provider" aria-label="外部 Agent 工具"><option value="codex">Codex CLI</option><option value="claude">Claude Code</option></select><button id="connect-agent-runtime" type="button">连结并验证</button><button id="choose-agent-runtime" type="button">选择程序</button></div>
+            <details class="manual-agent-access"><summary>其他工具：手动 MCP 接入</summary><div class="external-agent-row"><p>仅用于能持续处理 MCP 任务的工具；普通 MCP 连接无法自动唤醒聊天会话。</p><button id="copy-agent-instructions" type="button">复制文本</button></div></details>
             <div class="external-agent-status" id="external-agent-status" role="status"></div>
             <button id="disconnect-agent" type="button" hidden>断开外部 Agent</button>
           </section>
-          <h3 class="connection-method-title">方式2：API</h3>
+          <div class="connection-method-heading"><h3 class="connection-method-title">方式2：API</h3><button id="delete-api-config" type="button">删除该配置</button></div>
+          <p class="api-provider-help">支持 OpenAI、Claude、智谱、Kimi、Qwen、DeepSeek 与豆包。密钥仅保存在当前设备。</p>
           <label for="api-endpoint">API 地址 (Base URL)</label><input id="api-endpoint" name="endpoint" type="url" autocomplete="off" spellcheck="false" required aria-describedby="api-error" value="">
           <label for="api-key">API Key</label><div class="secret-input"><input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" required aria-describedby="api-error"><button id="toggle-api-key" type="button" aria-label="显示 API Key" aria-pressed="false">显示</button></div>
           <label for="api-model">模型</label><select id="api-model" name="model" required aria-describedby="api-error">${MODEL_OPTIONS}</select>
@@ -278,22 +296,23 @@ app.innerHTML = `
     </div>
     <div class="modal-backdrop" id="about-modal" hidden>
       <section class="settings-dialog about-dialog" role="dialog" aria-modal="true" aria-labelledby="about-dialog-title">
-        <header><div><h2 id="about-dialog-title">关于 LitGraph</h2><p>Version 1.0</p></div><button type="button" data-close-modal="about" aria-label="关闭">×</button></header>
-        <div class="about-content"><p><strong>开源许可：MIT</strong></p><p>LitGraph 是面向文献综述、理论比较与研究空白发现的本地论文可视化工作台。它把论文、观点、理论类别与关系放进一张可以直接操作的图谱。</p><p>项目开源、免费，允许学习、修改与再发布。如果它对你有帮助，欢迎前往 GitHub 点一个 Star。</p><a href="https://github.com/AOBI8001/LitGraph" target="_blank" rel="noreferrer">打开 GitHub 地址</a></div>
+        <header><div><h2 id="about-dialog-title">关于 LitGraph</h2><p>Version ${APP_VERSION}</p></div><button type="button" data-close-modal="about" aria-label="关闭">×</button></header>
+        <div class="about-content"><p>LitGraph 是面向文献综述、理论比较与研究空白发现的本地论文可视化工作台。它把论文、观点、理论类别与关系放进一张可以直接操作的图谱。</p><p>从文献发现、原文导入到二维与三维图谱，LitGraph 帮助你梳理研究脉络、比较观点与方法，并围绕单篇或多篇论文开展原文问答。论文原文、转换后的文本与分析结果保存在本机，可接入自己的模型 API 或外部 Agent。</p><p>项目开源、免费，允许学习、修改与再发布。如果它对你有帮助，欢迎前往 GitHub 点一个 Star。</p></div>
       </section>
     </div>
     <div class="modal-backdrop" id="paper-import-modal" hidden>
       <section class="settings-dialog paper-import-dialog" role="dialog" aria-modal="true" aria-labelledby="paper-import-title">
-        <header><div><h2 id="paper-import-title">添加论文</h2><p>一次可以导入一篇或多篇论文，处理完成后再统一加入画布。</p></div><button type="button" data-close-modal="paper-import" aria-label="关闭">×</button></header>
+        <header><div><h2 id="paper-import-title">添加论文</h2><p>保存原文，转换为 MD 并分析，自动更新论文图谱。</p></div><div class="paper-import-header-actions"><button id="paper-import-history-toggle" type="button" aria-label="论文导入历史" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 10a9 9 0 1 1 1 7M3 4v6h6m3-4v6l4 2"/></svg></button><button type="button" data-close-modal="paper-import" aria-label="关闭">×</button></div></header>
         <div class="paper-import-body">
           <div class="paper-dropzone" id="paper-dropzone" tabindex="0" role="button" aria-label="拖放或选择论文文件">
             <span class="paper-file-icon"><svg width="31" height="31" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M12 18v-6M9 15l3-3 3 3"/></svg></span>
             <strong>将论文文件拖到这里</strong>
-            <p>支持 PDF、Word、TXT、Markdown、RTF、HTML、EPUB、ODT、LaTeX、CSV 与 JSON</p>
+            <p>支持 PDF、Markdown、TXT、LaTeX、CSV 与 JSON</p>
             <button id="paper-file-picker" type="button">选择文件</button>
           </div>
           <div class="paper-file-list" id="paper-file-list" aria-live="polite"></div>
         </div>
+        <div id="paper-import-history" hidden></div>
         <footer><button type="button" data-close-modal="paper-import">取消</button><button class="primary" id="start-paper-import" type="button" disabled>完成</button></footer>
       </section>
     </div>
@@ -301,10 +320,6 @@ app.innerHTML = `
 `;
 
 app.querySelectorAll('svg').forEach((icon) => icon.setAttribute('aria-hidden', 'true'));
-if (desktop) {
-  document.querySelector('.about-content').insertAdjacentHTML('beforeend', `<label class="metrics-preference"><input id="metrics-enabled" type="checkbox" ${desktopBootstrap?.metricsEnabled ? 'checked' : ''}><span>发送基础使用统计</span></label><p class="metrics-description">仅发送随机安装标识、事件编号、打开或使用事件及时间；不发送论文、对话或密钥。可随时关闭。</p>`);
-  document.querySelector('#metrics-enabled').addEventListener('change', async event => { event.target.checked = await desktop.setMetricsEnabled(event.target.checked); });
-}
 const translateStaticUI = captureStaticUI(app);
 
 const workspace = document.querySelector('#graph-stage');
@@ -459,8 +474,16 @@ let discoverySelected = new Set();
 let discoveryStep = 'search';
 let discoverySearching = false;
 let discoveryImporting = false;
+let receivingInstitution = false;
 let discoveryController = null;
 let discoveryProgress = '';
+let discoverySplit = .4;
+const expandedHistoryJobs = new Set();
+const pendingOriginalFiles = new Map();
+let discoveryHistory = restoreJobs(localStorage.getItem(HISTORY_KEY));
+let activeDiscoveryJobId = null;
+let discoveryHistoryOpen = false;
+let draggedResearchTab = null;
 let discoveryCustomCount = false;
 let discoveryNotice = '';
 let discoveryQuery = '';
@@ -506,7 +529,7 @@ const graph3dInitialized = {
   semantic: { argument: false, semantic: false },
   timeline: { argument: false, semantic: false }
 };
-const filterState = { yearStart: '', yearEnd: '', journal: 'all', fulltext: 'all' };
+const filterState = { yearStart: '', yearEnd: '', journals: [], fulltext: 'all' };
 const viewSettings = {
   semantic: { charge: 2000, nodeSize: 100, sizeDifference: 100, colorVibrance: 100, edgeWidth: 100, edgeVibrance: 120, edgePalette: 'e0', paperLabels: true, paperLabelSize: 100, paperLabelMode: 'authors-year', theoryLabels: true, theoryLabelSize: 100, readMarkers: true, palette: 'p0' },
   timeline: { charge: 2000, nodeSize: 100, sizeDifference: 100, colorVibrance: 100, edgeWidth: 100, edgeVibrance: 120, edgePalette: 'e0', yearSpacing: 100, cohortSpread: 430, showYearAxis: true, relationLayer: 'argument', paperLabels: true, paperLabelSize: 100, paperLabelMode: 'authors-year', theoryLabels: false, theoryLabelSize: 100, readMarkers: true, palette: 'p0' }
@@ -529,7 +552,7 @@ function showAgentConnectedNotice(model) {
   dialog.id='agent-connected-dialog';
   dialog.className='research-notice-dialog agent-connected-dialog';
   dialog.setAttribute('aria-labelledby','agent-connected-title');
-  dialog.innerHTML=`<form method="dialog"><header><strong id="agent-connected-title">${panelText('外部 Agent 接入成功','External agent connected')}</strong><button aria-label="${panelText('关闭','Close')}">×</button></header><p class="agent-connected-model">${escapeHtml(model)}</p><p>${panelText('已完成连接。现在可以在文献发现和研究空间中发起请求，请保持 Agent 的任务运行。','Connection established. You can now send requests from Literature discovery and Research space. Keep your agent task running.')}</p><button class="primary">${panelText('开始使用','Get started')}</button></form>`;
+  dialog.innerHTML=`<form method="dialog"><header><strong id="agent-connected-title">${panelText('外部 Agent 接入成功','External agent connected')}</strong><button aria-label="${panelText('关闭','Close')}">×</button></header><p class="agent-connected-model">${escapeHtml(model)}</p><p>${externalState().managed ? panelText('已启用按需调用。文献检索、导入分析和研究空间问答会自动启动独立任务，完成后退出，无须保持外部聊天运行。','On-demand execution is enabled. Searches, import analysis and research questions start independent tasks and exit when finished. No external chat needs to stay active.') : panelText('已完成手动 MCP 连接。请保持外部 Agent 的任务循环运行。','Manual MCP connected. Keep the external agent task loop running.')}</p><button class="primary">${panelText('开始使用','Get started')}</button></form>`;
   document.body.appendChild(dialog);
   dialog.addEventListener('close',()=>dialog.remove());
   dialog.showModal();
@@ -551,7 +574,10 @@ function updateModelBadge() {
   const status = document.querySelector('#external-agent-status');
   if (status) {
     status.classList.toggle('connected', agent.connected);
-    status.textContent = agent.connected ? panelText(`已连接 · ${agent.model}（Agent 自报）`, `Connected · ${agent.model} (self-reported)`) : panelText('未连接 · 请在 Agent 中完成接入。', 'Not connected · Complete setup in your agent.');
+    status.textContent = agent.connected ? agent.managed
+      ? panelText(`按需调用已启用 · ${agent.model} · ${agent.processing ? '处理中' : '待命'}${agent.queued ? ` · 排队 ${agent.queued}` : ''}`, `On-demand ready · ${agent.model} · ${agent.processing ? 'Processing' : 'Idle'}${agent.queued ? ` · ${agent.queued} queued` : ''}`)
+      : panelText(`已连接 · ${agent.model}（Agent 自报）`, `Connected · ${agent.model} (self-reported)`)
+      : panelText('未连接 · 桌面版可验证并启用按需调用。', 'Not connected · Enable on-demand execution in the desktop app.');
   }
   const disconnect = document.querySelector('#disconnect-agent');
   if (disconnect) disconnect.hidden = !externalState().connected;
@@ -582,7 +608,7 @@ function updateResearchEntry() {
 async function callAI(messages, config = aiConfig, maxTokens = 240, options = {}) {
   if (!options.connectionTest && (config?.provider === 'external-agent' || (config === aiConfig && externalState().connected))) {
     await localRequest('context', agentPageContext());
-    return externalCompletion(messages, maxTokens, options.signal);
+    return externalCompletion(messages, maxTokens, options.signal, options.researchMode);
   }
   if (!config?.endpoint || !config?.apiKey || !config?.model) throw new Error(panelText('AI API 尚未配置', 'AI API is not configured'));
   const endpoint = config.endpoint.replace(/\/+$/, '');
@@ -609,11 +635,12 @@ async function callAI(messages, config = aiConfig, maxTokens = 240, options = {}
     if (options.json && /deepseek/i.test(`${provider} ${config.model} ${endpoint}`)) body.response_format = { type: 'json_object' };
     if (options.connectionTest && /deepseek/i.test(`${provider} ${config.model} ${endpoint}`) && !/reasoner/i.test(config.model)) body.thinking = { type: 'disabled' };
   }
-  if (options.researchMode) {
-    const controls = researchThinkingOptions(config, protocol, options.researchMode);
+  if (options.researchMode || options.connectionTest) {
+    const controls = researchThinkingOptions(config, protocol, options.researchMode || 'quick');
     Object.assign(body, controls);
     if (controls.thinking?.type === 'enabled') delete body.temperature;
   }
+  compatibleModelBody(body,config,protocol,options);
   const response = await modelFetch(url, {
     method: 'POST',
     headers,
@@ -648,6 +675,7 @@ function openModal(id) {
 }
 
 function closeModal(id) {
+  if(id==='paper-import')document.querySelector('#paper-import-history').innerHTML='';
   const modal = document.querySelector(`#${id}-modal`);
   if (modal) modal.hidden = true;
   const focusTarget = id === 'paper-import' ? document.querySelector('#add-papers-button') : document.querySelector('[data-panel="workspace-settings"]');
@@ -671,7 +699,7 @@ function isNodeVisible(node) {
   if (!enabledTheories.has(node.primaryTheory)) return false;
   if (filterState.yearStart && Number(node.year) < Number(filterState.yearStart)) return false;
   if (filterState.yearEnd && Number(node.year) > Number(filterState.yearEnd)) return false;
-  if (filterState.journal !== 'all' && node.journal !== filterState.journal) return false;
+  if (filterState.journals.length && !filterState.journals.includes(node.journal)) return false;
   if (filterState.fulltext === 'yes' && !node.hasPdf) return false;
   if (filterState.fulltext === 'no' && node.hasPdf) return false;
   return true;
@@ -754,6 +782,8 @@ function buildVectorLinks() {
     const counts = new Map();
     doc.tokens.forEach((token) => counts.set(token, (counts.get(token) || 0) + 1));
     doc.vector = new Map([...counts].map(([token, count]) => [token, (1 + Math.log(count)) * Math.log((docs.length + 1) / ((frequency.get(token) || 0) + 1))]));
+    doc.node.semanticVector=Object.fromEntries(doc.vector);
+    doc.node.semanticVectorMethod='tfidf_title_abstract';
   });
   const cosine = (left, right) => {
     let dot = 0; let a2 = 0; let b2 = 0;
@@ -1256,6 +1286,8 @@ function drawNodeLabel(node, hovered = false) {
 }
 
 function render() {
+  const deleteButton=document.querySelector('#delete-papers-button');
+  if(deleteButton)deleteButton.disabled=!nodes.some(node=>selectedNodes.has(node.id)||selectedNode?.id===node.id);
   updateGraphLegend();
   if (renderMode === '3d') {
     void renderGraph3D();
@@ -1898,20 +1930,28 @@ function paperSource(node) {
 }
 
 async function openPaper(node) {
-  const target = window.open('about:blank', '_blank');
-  if (target) target.opener = null;
-  const original = await originalBlob(node);
-  if (original) {
-    // A supplied file MIME type must never turn an original into active HTML.
-    const pdf = (await original.slice(0, 5).text()) === '%PDF-';
-    const url = URL.createObjectURL(new Blob([original], { type: pdf ? 'application/pdf' : 'text/plain;charset=utf-8' }));
-    if (target) target.location.replace(url); else { const a = document.createElement('a'); a.href = url; a.download = node.fileName || `${node.title}.pdf`; a.click(); }
-    setTimeout(() => URL.revokeObjectURL(url), 120000);
-    return;
-  }
-  const source = paperSource(node);
-  if (!/^(https?:|blob:)/i.test(source || '')) { target?.close(); return toast(panelText('原文件不可用，请重新选择论文文件。', 'Original unavailable. Please select the paper file again.')); }
-  if (target) target.location.replace(source); else window.open(source, '_blank', 'noopener,noreferrer');
+  try {
+    if (!node.fulltextKey && node.fulltextStorageKey) {
+      const document = await getFulltext(node);
+      if (document) { await saveFulltext(currentProjectId, node, document); saveCurrentProject(); }
+    }
+    if (node.fulltextKey && desktop) {
+      await localRequest('open-native', { key: node.fulltextKey });
+      return;
+    }
+    const original = await originalBlob(node);
+    if (original) {
+      const url = URL.createObjectURL(original);
+      const a = document.createElement('a'); a.href = url;
+      a.download = node.fileName || (node.title.replace(/[<>:"/\\|?*]/g, '_') + (original.type.includes('pdf') ? '.pdf' : '.md'));
+      a.click(); setTimeout(() => URL.revokeObjectURL(url), 60000);
+      toast(panelText('原文已下载，请用系统中的应用打开。', 'Original downloaded. Open it with a system application.'));
+      return;
+    }
+    const source = paperSource(node);
+    if (/^https?:/i.test(source)) window.open(source, '_blank', 'noopener,noreferrer');
+    else toast(panelText('原文件不可用，请补充论文原文。', 'Original unavailable. Please add the paper file.'));
+  } catch (error) { toast(localizedError(error, language)); }
 }
 
 function citationText(node, style) {
@@ -1979,7 +2019,7 @@ function openDeepReadWindowLegacy(node = null) {
   const renderHistory = () => {
     const records = JSON.parse(localStorage.getItem(chatKey()) || '[]');
     const host = element.querySelector('.deep-read-history');
-    host.innerHTML = records.length ? records.map((message) => `<div class="chat-message ${message.role}"><b>${message.role === 'user' ? panelText('你', 'You') : 'AI'}</b><p>${escapeHtml(message.text)}</p></div>`).join('') : `<p class="chat-empty">${panelText('针对研究问题、论证链、方法局限或结果含义提出问题。', 'Ask about the research question, argument chain, limitations, or implications.')}</p>`;
+    host.innerHTML = records.length ? records.map((message) => `<div class="chat-message ${message.role}"><b>${message.role === 'user' ? panelText('你', 'You') : 'AI'}</b>${message.role==='assistant'&&(!message.status||message.status==='done')?`<div class="message-markdown">${messageMarkdown(message.text)}</div>`:`<p>${escapeHtml(message.text)}</p>`}</div>`).join('') : `<p class="chat-empty">${panelText('针对研究问题、论证链、方法局限或结果含义提出问题。', 'Ask about the research question, argument chain, limitations, or implications.')}</p>`;
     host.scrollTop = host.scrollHeight;
   };
   const initialScope = node ? 'paper' : selectedNodes.size ? 'selected' : 'project';
@@ -2269,11 +2309,11 @@ function renderResearchDesk() {
   element.querySelector('[data-desk-context]').textContent = `${title} · ${tab.label}`;
   element.querySelector('.deep-read-body').innerHTML = `
     <div class="research-tabbar" role="tablist" aria-label="${panelText('研究对话标签页', 'Research conversation tabs')}">
-      ${researchTabs.map((item) => `<div class="research-tab ${item.id === tab.id ? 'active' : ''}"><button type="button" role="tab" data-research-tab="${escapeHtml(item.id)}" aria-selected="${item.id === tab.id}"><span>${item.type === 'project' ? '◎' : item.type === 'selected' ? '≡' : '◉'}</span><b>${escapeHtml(item.label)}</b></button>${item.type === 'project' ? '' : `<button class="research-tab-close" type="button" data-close-research-tab="${escapeHtml(item.id)}" aria-label="${panelText('关闭标签页', 'Close tab')}">×</button>`}</div>`).join('')}
+      ${researchTabs.map((item) => `<div draggable="true" data-tab-id="${escapeHtml(item.id)}" class="research-tab ${item.id === tab.id ? 'active' : ''}"><button type="button" role="tab" data-research-tab="${escapeHtml(item.id)}" aria-selected="${item.id === tab.id}"><span>${item.type === 'project' ? '◎' : item.type === 'selected' ? '≡' : '◉'}</span><b>${escapeHtml(item.label)}</b></button>${item.type === 'project' ? '' : `<button class="research-tab-close" type="button" data-close-research-tab="${escapeHtml(item.id)}" aria-label="${panelText('关闭标签页', 'Close tab')}">×</button>`}</div>`).join('')}
 
     </div>
     <div class="deep-read-history" aria-live="polite">
-      ${records.length ? records.map((message) => `<div class="chat-turn ${message.role}" data-status="${escapeHtml(message.status || 'done')}" ${message.status === 'pending' ? 'data-research-progress' : ''}><span class="chat-avatar">${message.role === 'user' ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>' : `<img src="${BRAND_MARK}" alt="">`}</span><div class="chat-message ${message.role}"><b>${message.role === 'user' ? panelText('你', 'You') : 'LitGraph AI'}</b><p>${escapeHtml(message.text)}</p>${message.attachments?.length ? `<small class="chat-attachment-names">${message.attachments.map(escapeHtml).join(' · ')}</small>` : ''}<time>${escapeHtml(message.time || panelText('刚刚', 'Now'))}${message.responseMode ? ` · ${message.responseMode === 'expert' ? panelText('专家', 'Expert') : panelText('快速', 'Quick')}` : ''}</time></div></div>`).join('') : `<div class="research-empty"><span><img src="${BRAND_MARK}" alt=""></span><strong>${panelText('从一个可比较的问题开始', 'Start with a comparable question')}</strong><p>${tab.type === 'paper' ? panelText('询问这篇论文的方法、结论、局限或原文依据。', 'Ask about this paper’s method, findings, limitations, or source evidence.') : panelText('比较论文的共同结论、分歧、方法差异与研究空白。', 'Compare shared findings, disagreements, methodological differences, and research gaps.')}</p></div>`}
+      ${records.length ? records.map((message) => `<div class="chat-turn ${message.role}" data-status="${escapeHtml(message.status || 'done')}" ${message.status === 'pending' ? 'data-research-progress' : ''}><span class="chat-avatar">${message.role === 'user' ? '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/></svg>' : `<img src="${BRAND_MARK}" alt="">`}</span><div class="chat-message ${message.role}"><b>${message.role === 'user' ? panelText('你', 'You') : 'LitGraph AI'}</b>${message.role==='assistant'&&(!message.status||message.status==='done')?`<div class="message-markdown">${messageMarkdown(message.text)}</div>`:`<p>${escapeHtml(message.text)}</p>`}${message.attachments?.length ? `<small class="chat-attachment-names">${message.attachments.map(escapeHtml).join(' · ')}</small>` : ''}<time>${escapeHtml(message.time || panelText('刚刚', 'Now'))}${message.responseMode ? ` · ${message.responseMode === 'expert' ? panelText('专家', 'Expert') : panelText('快速', 'Quick')}` : ''}</time></div></div>`).join('') : `<div class="research-empty"><span><img src="${BRAND_MARK}" alt=""></span><strong>${tab.type === 'paper' ? panelText('从一个问题开始', 'Start with a question') : panelText('从一个可比较的问题开始', 'Start with a comparable question')}</strong><p>${tab.type === 'paper' ? panelText('询问这篇论文的方法、结论、局限或原文依据。', 'Ask about this paper’s method, findings, limitations, or source evidence.') : panelText('比较论文的共同结论、分歧、方法差异与研究空白。', 'Compare shared findings, disagreements, methodological differences, and research gaps.')}</p></div>`}
       ${canRetryQuick ? `<button type="button" class="research-retry-quick">${panelText('用快速模式重试', 'Retry in quick mode')}</button>` : ''}
       <div class="research-prompt-list">${promptIdeas.map((prompt) => `<button type="button" data-research-prompt="${escapeHtml(prompt)}">${escapeHtml(prompt)}</button>`).join('')}</div>
     </div>
@@ -2281,21 +2321,47 @@ function renderResearchDesk() {
       <div class="research-attachments">${(researchAttachments.get(chatKey) || []).map(a => `<span title="${escapeHtml(a.name)}"><span class="attachment-name">${escapeHtml(a.name)}</span><button type="button" data-remove-attachment="${a.id}" aria-label="${panelText('移除附件', 'Remove attachment')}">×</button></span>`).join('')}${researchAttachmentLoads.has(chatKey) ? `<small>${panelText('正在读取文件…', 'Reading files…')}</small>` : ''}</div>
       <input class="research-file-input" type="file" accept=".pdf,.md,.txt,.csv,.json,.tex,image/png,image/jpeg,image/webp" multiple hidden>
       <div class="research-drop-feedback" aria-live="polite">${panelText('松开即可添加研究材料', 'Drop to add research materials')}</div>
+      <textarea class="research-composer-input" id="deep-read-input" rows="1" name="research-question" autocomplete="off" aria-label="${panelText('向当前标签页提问', 'Ask this tab')}" placeholder="${panelText('向当前选中论文提问', 'Ask the currently selected papers')}"></textarea>
       <div class="research-composer-row">
-        <button class="research-add-file" type="button" aria-label="${panelText('添加材料', 'Add material')}">+</button>
-        <textarea id="deep-read-input" rows="1" name="research-question" autocomplete="off" aria-label="${panelText('向当前标签页提问', 'Ask this tab')}" placeholder="${panelText('向当前选中论文提问', 'Ask the currently selected papers')}"></textarea>
+        <button class="research-add-file" type="button" aria-label="${panelText('添加材料', 'Add material')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
         <label class="research-mode-control" title="${panelText('回答偏好：快速优先及时作答，专家优先深入分析。这是速度与思考深度的取舍，不会更换当前模型。', 'Response preference: Quick prioritizes speed; Expert prioritizes depth. This does not switch models.')}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></svg>
           <select id="research-response-mode" aria-label="${panelText('回答偏好', 'Response preference')}" ${pending ? 'disabled' : ''}><option value="quick" ${responseMode === 'quick' ? 'selected' : ''}>${panelText('快速', 'Quick')}</option><option value="expert" ${responseMode === 'expert' ? 'selected' : ''}>${panelText('专家', 'Expert')}</option></select>
           <svg class="mode-chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg>
         </label>
         <button class="research-send" type="button" aria-label="${pending ? panelText('正在分析', 'Analyzing') : panelText('发送并分析', 'Send and analyze')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
-      </div><div class="research-composer-help">${panelText('Enter 发送 · Shift + Enter 换行', 'Enter to send · Shift + Enter for a new line')}</div>
+      </div>
     </form>`;
   const history = element.querySelector('.deep-read-history');
   element.querySelector('#research-response-mode').addEventListener('change', event => localStorage.setItem('litgraph.researchMode', normalizeResearchMode(event.target.value)));
   element.querySelector('.research-retry-quick')?.addEventListener('click', () => researchRequests.get(chatKey)?.retryQuick());
-  history.scrollTop = history.scrollHeight;
+  const tabbar = element.querySelector('.research-tabbar');
+  tabbar.addEventListener('dragstart', event => {
+    const tab = event.target.closest('[data-tab-id]');
+    if (!tab) return;
+    draggedResearchTab=tab.dataset.tabId;
+    event.dataTransfer.setData('application/x-litgraph-tab',draggedResearchTab);
+    event.dataTransfer.effectAllowed='move';tab.classList.add('dragging');
+    event.stopPropagation();
+  });
+  tabbar.addEventListener('dragover', event => {
+    if (!draggedResearchTab) return;
+    event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect='move';
+    tabbar.querySelectorAll('[data-drop-side]').forEach(t=>delete t.dataset.dropSide);
+    const tab=event.target.closest('[data-tab-id]');
+    if(tab && tab.dataset.tabId!==draggedResearchTab)tab.dataset.dropSide=event.clientX>tab.getBoundingClientRect().x+tab.getBoundingClientRect().width/2?'after':'before';
+  });
+  tabbar.addEventListener('drop',event=>{
+    if(!draggedResearchTab)return;
+    event.preventDefault();event.stopPropagation();
+    const tab=event.target.closest('[data-tab-id]');
+    if(tab)researchTabs=moveTab(researchTabs,draggedResearchTab,tab.dataset.tabId,tab.dataset.dropSide==='after');
+    draggedResearchTab=null;renderResearchDesk();
+  });
+  tabbar.addEventListener('dragend',()=>{
+    draggedResearchTab=null;
+    tabbar.querySelectorAll('[data-drop-side]').forEach(t=>delete t.dataset.dropSide);
+    tabbar.querySelectorAll('.dragging').forEach(t=>t.classList.remove('dragging'));
+  });
   element.querySelectorAll('[data-research-tab]').forEach((button) => button.addEventListener('click', () => {
     activeResearchTabId = button.dataset.researchTab;
     renderResearchDesk();
@@ -2316,6 +2382,12 @@ function renderResearchDesk() {
   element.querySelectorAll('[data-remove-attachment]').forEach(button => button.addEventListener('click', () => { researchAttachments.set(chatKey, (researchAttachments.get(chatKey) || []).filter(a => a.id !== button.dataset.removeAttachment)); renderResearchDesk(); }));
   const composerInput = element.querySelector('#deep-read-input');
   composerInput.value = researchDrafts.get(chatKey) || '';
+  const resizeComposer = () => {
+    composerInput.style.height = '36px';
+    composerInput.style.height = `${Math.min(100, composerInput.scrollHeight)}px`;
+  };
+  resizeComposer();
+  history.scrollTop = history.scrollHeight;
   updateResearchSendButton(element, chatKey);
   composerInput.addEventListener('keydown', event => {
     if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
@@ -2332,8 +2404,7 @@ function renderResearchDesk() {
     researchDrafts.set(chatKey, composerInput.value);
     updateResearchSendButton(element, chatKey);
     const keepLatestVisible = history.scrollHeight - history.clientHeight - history.scrollTop < 32;
-    composerInput.style.height = '36px';
-    composerInput.style.height = `${Math.min(100, composerInput.scrollHeight)}px`;
+    resizeComposer();
     if (keepLatestVisible) history.scrollTop = history.scrollHeight;
   });
 
@@ -2373,6 +2444,9 @@ function openDeepReadWindow(node = null) {
   renderResearchDesk();
 }
 
+function paperIsProcessed(node) {
+  return node.analysisStatus==='done' && node.primaryTheory!=='unclassified' && Boolean(node.markdownRelativePath || node.fulltextStatus?.startsWith('indexed'));
+}
 function renderInspector(node) {
   if (!node) return renderOverview();
   inspector.classList.add('open');
@@ -2388,6 +2462,7 @@ function renderInspector(node) {
   inspector.innerHTML = `
     <div class="inspector-resizer" id="inspector-resizer" role="separator" aria-label="${panelText('调整详情栏宽度', 'Resize details panel')}"></div>
     <button class="inspector-close-tab" id="close-inspector" type="button" aria-label="${panelText('关闭详情', 'Close details')}"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="m2.5 2.5 7 7m0-7-7 7"/></svg></button>
+    <button id="delete-inspector-paper" class="inspector-delete-action" type="button">${panelText('删除该文献','Delete this paper')}</button>
     <div class="paper-hero">
       <div class="paper-badges">
         <span class="badge badge-year"><b>${panelText('年份', 'Year')}：</b>${node.year}</span>
@@ -2405,12 +2480,13 @@ function renderInspector(node) {
         <button id="citation-button" type="button" aria-expanded="false"><span class="action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"><path d="M5 7.5h5v5H7.5A3.5 3.5 0 0 1 4 16M14 7.5h5v5h-2.5A3.5 3.5 0 0 1 13 16"/></svg></span><b>${panelText('引用', 'Cite')}</b></button>
       </div>
       <p class="paper-fulltext-status" title="${escapeHtml(node.fulltextError||'')}">${node.fulltextStatus==='indexed'?panelText('原文索引已保存至本地','Full-text index saved locally'):node.fulltextStatus==='indexed_browser_only'?panelText('原文已索引 · 仅浏览器保存，请导出备份','Indexed in this browser only; export a backup'):node.originalRelativePath?panelText('PDF 已保存 · 原文尚需转换 / OCR','PDF saved · text extraction / OCR needed'):panelText('原文未索引 · 可将 PDF 拖入研究空间补充','Full text not indexed · add a PDF in Research space')}</p>
+      ${!node.hasPdf?`<button id="institution-paper-button" class="paper-process-action" type="button">${panelText('通过机构获取原文','Get full text through institution')}</button>`:''}
       <div class="citation-panel" id="citation-panel" hidden>
         <label>${panelText('参考文献格式', 'Citation style')}<select id="citation-style"><option value="apa" ${savedStyle === 'apa' ? 'selected' : ''}>APA 7</option><option value="chicago" ${savedStyle === 'chicago' ? 'selected' : ''}>Chicago</option><option value="harvard" ${savedStyle === 'harvard' ? 'selected' : ''}>Harvard</option><option value="mla" ${savedStyle === 'mla' ? 'selected' : ''}>MLA 9</option>${language === 'zh' ? `<option value="gbt" ${savedStyle === 'gbt' ? 'selected' : ''}>GB/T 7714—2015</option>` : ''}</select></label>
         <p id="citation-preview">${escapeHtml(citationText(node, savedStyle))}</p><button id="copy-citation" type="button">${panelText('复制参考文献', 'Copy citation')}</button>
       </div>
     </div>
-    <section class="detail-section editable-conclusion"><h3>${panelText('AI 总结', 'AI summary')}</h3><p class="ai-summary-copy" id="editable-summary" contenteditable="true" spellcheck="true">${escapeHtml(summaryText)}</p></section>
+    <section class="detail-section editable-conclusion"><h3>${panelText('AI 总结', 'AI summary')}</h3><p class="ai-summary-copy" id="editable-summary" contenteditable="true" spellcheck="true">${escapeHtml(summaryText)}</p>${paperIsProcessed(node)?'':`<button id="process-paper-button" class="paper-process-action" type="button" ${discoveryImporting || discoverySearching ? 'disabled' : ''}>${panelText('本地转换并分析', 'Convert locally and analyze')}</button>`}${node.processingError ? `<small role="status" class="paper-processing-error">${escapeHtml(localizedError(node.processingError,language))}</small>` : ''}</section>
     <section class="detail-section abstract-section"><h3>${panelText('摘要', 'Abstract')}</h3><p id="editable-abstract" contenteditable="true" spellcheck="true">${escapeHtml(abstractText)}</p></section>
     ${node.fulltextError ? `<section class="detail-section"><h3>${panelText('原文状态', 'Full-text status')}</h3><p>${escapeHtml(localizedError(node.fulltextError, language))}</p></section>` : ''}
     <div class="inspector-watermark" aria-hidden="true"><img src="${BRAND_MARK}" alt=""></div>`;
@@ -2425,6 +2501,9 @@ function renderInspector(node) {
   });
   document.querySelector('#paper-title-link').addEventListener('click', () => openPaper(node));
   document.querySelector('#open-pdf-button').addEventListener('click', () => openPaper(node));
+  document.querySelector('#process-paper-button')?.addEventListener('click', () => void processSinglePaper(node));
+  document.querySelector('#institution-paper-button')?.addEventListener('click',()=>void openInstitutionWindow(node));
+  document.querySelector('#delete-inspector-paper').addEventListener('click',()=>void deletePaperNodes([node.id]));
   document.querySelector('#ask-paper-button').addEventListener('click', () => openDeepReadWindow(node));
   document.querySelector('#citation-button').addEventListener('click', (event) => {
     const panel = document.querySelector('#citation-panel');
@@ -2449,6 +2528,7 @@ function renderInspector(node) {
 }
 
 async function ensureSummaryLanguage(node, targetLanguage, retry = false) {
+  if (node.analysisStatus && node.analysisStatus !== 'done' || /等待生成项目内总结|Awaiting a project summary/.test(node.summary || '')) return;
   if (summaryForLanguage(node, targetLanguage)) return;
   const source = String(node.aiSummaryZh || node.aiSummaryEn || node.summary || '').trim();
   if (!source) return;
@@ -2518,7 +2598,12 @@ function renderFilters() {
 
   document.querySelector('#year-start-filter')?.addEventListener('change', (event) => { filterState.yearStart = event.target.value; applyActiveFilters(); });
   document.querySelector('#year-end-filter')?.addEventListener('change', (event) => { filterState.yearEnd = event.target.value; applyActiveFilters(); });
-  document.querySelector('#journal-filter')?.addEventListener('change', (event) => { filterState.journal = event.target.value; applyActiveFilters(); });
+  document.querySelectorAll('[data-journal-choice]').forEach(input => input.addEventListener('change', () => {
+    filterState.journals = [...document.querySelectorAll('[data-journal-choice]:checked')].map(i => i.value);
+    document.querySelector('#journal-filter > summary').textContent = filterState.journals.length ? panelText(`已选 ${filterState.journals.length} 个期刊`,`${filterState.journals.length} journals selected`) : panelText('全部期刊','All journals');
+    applyActiveFilters();
+  }));
+  document.querySelector('#journal-filter-all')?.addEventListener('click', () => { filterState.journals = []; applyActiveFilters(); renderSecondaryPanel(); });
   document.querySelector('#fulltext-filter')?.addEventListener('change', (event) => { filterState.fulltext = event.target.value; applyActiveFilters(); });
 }
 
@@ -2579,7 +2664,7 @@ function renderSecondaryPanel() {
   } else if (activePanel === 'nodes') {
     body = `
       ${sliderControl('node-charge', panelText('节点斥力', 'Repulsion'), 40, 4000, s.charge, '', panelText('控制所有未固定节点彼此排斥的力度。数值越大，聚落越展开；被固定的节点不会被斥力推动。', 'Controls how strongly unfixed nodes repel one another. Higher values spread clusters further; fixed nodes are unaffected.'), 'repulsion')}
-      ${sliderControl('node-size', panelText('节点整体大小', 'Overall size'), 0, 200, s.nodeSize, '%', panelText('同时缩放所有论文节点。', 'Scales all paper nodes together.'), 'node-size')}
+      ${sliderControl('node-size', panelText('节点整体大小', 'Overall size'), 0, 1000, s.nodeSize, '%', panelText('同时缩放所有论文节点。', 'Scales all paper nodes together.'), 'node-size')}
       ${sliderControl('node-difference', panelText('节点大小差异度', 'Size contrast'), 10, 500, s.sizeDifference, '%', panelText('放大或压缩高被引与低被引论文的尺寸差异。', 'Expands or compresses the visual size gap between highly and lightly cited papers.'), 'size-contrast')}
       ${sliderControl('color-vibrance', panelText('颜色鲜艳度', 'Color vibrance'), 0, 200, s.colorVibrance, '%', panelText('增强或减弱理论颜色的鲜明程度。', 'Changes how vivid theory colors appear.'), 'color-vibrance')}
       <div class="palette-control"><span class="control-label">${panelText('风格', 'Style')}</span><div class="palette-grid">
@@ -2599,7 +2684,7 @@ function renderSecondaryPanel() {
     const journals = [...new Set(nodes.map((node) => node.journal).filter(Boolean))].sort();
     body = `<div class="subheading"><span>${panelText('论文范围', 'Paper scope')}</span><small>${panelText('组合筛选', 'Combined filters')}</small></div>
       <div class="filter-controls"><label><span>${panelText('起止年份', 'Year range')}</span><div><input id="year-start-filter" type="number" min="1900" max="2100" value="${escapeHtml(filterState.yearStart)}" placeholder="2017"><b>—</b><input id="year-end-filter" type="number" min="1900" max="2100" value="${escapeHtml(filterState.yearEnd)}" placeholder="2026"></div></label>
-      <label><span>${panelText('期刊 / 来源', 'Journal / source')}</span><select id="journal-filter"><option value="all">${panelText('全部', 'All')}</option>${journals.map((journal) => `<option value="${escapeHtml(journal)}" ${filterState.journal === journal ? 'selected' : ''}>${escapeHtml(journal)}</option>`).join('')}</select></label>
+      <div class="journal-filter-field"><span>${panelText('期刊 / 来源', 'Journal / source')}</span><details id="journal-filter"><summary>${filterState.journals.length ? panelText(`已选 ${filterState.journals.length} 个期刊`, `${filterState.journals.length} journals selected`) : panelText('全部期刊', 'All journals')}</summary><div class="journal-choices"><button type="button" id="journal-filter-all">${panelText('显示全部', 'Show all')}</button>${journals.map(journal => `<label><input type="checkbox" data-journal-choice value="${escapeHtml(journal)}" ${filterState.journals.includes(journal) ? 'checked' : ''}><span>${escapeHtml(journal)}</span></label>`).join('')}</div></details></div>
       <label><span>${panelText('本地原文', 'Local full text')}</span><select id="fulltext-filter"><option value="all" ${filterState.fulltext === 'all' ? 'selected' : ''}>${panelText('全部', 'All')}</option><option value="yes" ${filterState.fulltext === 'yes' ? 'selected' : ''}>${panelText('有原文', 'Available')}</option><option value="no" ${filterState.fulltext === 'no' ? 'selected' : ''}>${panelText('无原文', 'Missing')}</option></select></label></div>
       <div class="subheading relation-subheading"><span>${panelText('主要理论', 'Primary theories')}</span><small>${panelText('AI 识别全部类别', 'All AI-detected classes')}</small></div><div id="theory-filters"></div>${view === 'semantic' || settings().relationLayer === 'argument' ? `<div class="subheading relation-subheading"><span>${panelText('关系类型', 'Relation types')}</span><small>${panelText('可组合', 'Combinable')}</small></div><div id="relation-filters"></div>` : ''}`;
   } else if (activePanel === 'statistics') {
@@ -2615,10 +2700,13 @@ function renderSecondaryPanel() {
       <button type="button" data-workspace-action="new"><span><strong>${panelText('新建本地项目', 'New local project')}</strong><small>${panelText('创建一个空白研究项目', 'Create a blank research project')}</small></span></button>
       <button type="button" data-workspace-action="import"><span><strong>${panelText('导入项目数据', 'Import project data')}</strong><small>LitGraph JSON</small></span></button>
       <button type="button" data-workspace-action="export"><span><strong>${panelText('导出项目数据', 'Export project data')}</strong><small>LitGraph JSON</small></span></button>
+      <button type="button" data-workspace-action="data-folder"><span><strong>${panelText('数据文件夹', 'Data folder')}</strong><small>${panelText('原文、MD、分析与项目数据', 'Originals, Markdown, analysis and project data')}</small></span></button>
       <p>${panelText('连接与应用', 'Connections & app')}</p>
       <button type="button" data-workspace-action="api"><span><strong>${panelText('模型接入', 'AI connection')}</strong><small>${panelText('配置模型、API 地址与密钥', 'Configure model, API URL and key')}</small></span></button>
       <a href="https://github.com/" target="_blank" rel="noreferrer"><span><strong>GitHub</strong><small>${panelText('查看项目地址', 'Open project repository')}</small></span></a>
-      <button type="button" data-workspace-action="about"><span><strong>${panelText('关于 LitGraph', 'About LitGraph')}</strong><small>Version 1.0</small></span></button>
+      <button type="button" data-workspace-action="about"><span><strong>${panelText('关于 LitGraph', 'About LitGraph')}</strong><small>Version ${APP_VERSION}</small></span></button>
+      <a href="https://my.feishu.cn/share/base/form/shrcnbw8bQOlnsv8EXdKFaXnoIy" target="_blank" rel="noopener noreferrer"><span><strong>${panelText('用户反馈', 'User feedback')}</strong><small>${panelText('反馈问题或分享使用建议', 'Report an issue or share a suggestion')}</small></span></a>
+      <button type="button" data-workspace-action="reset-settings"><span><strong>${panelText('还原所有设置', 'Reset all settings')}</strong><small>${panelText('清除连接和界面设置，保留全部研究数据', 'Reset connections and preferences; keep all research data')}</small></span></button>
     </div>`;
   } else if (activePanel === 'literature-discovery') {
     body = `<div class="discovery-panel">
@@ -2785,6 +2873,8 @@ function bindColumnResizers() {
 
 function renderDataView() {
   if (view !== 'table') return;
+  const previousScroll = dataView.querySelector('.data-table-wrap');
+  const scroll = { top: previousScroll?.scrollTop || 0, left: previousScroll?.scrollLeft || 0 };
   const records = dataEntity === 'nodes' ? nodes : project.semanticLinks;
   const allSelected = records.length > 0 && records.every((record) => dataSelection.has(record.id));
   dataView.hidden = false;
@@ -2801,6 +2891,8 @@ function renderDataView() {
         <tbody>${project.semanticLinks.map((link) => `<tr><td class="check-cell"><input type="checkbox" aria-label="${escapeHtml(`${panelText('选择', 'Select')} ${link.id}`)}" data-select-record="${escapeHtml(link.id)}" ${dataSelection.has(link.id) ? 'checked' : ''}></td><td class="mono">${escapeHtml(link.id)}</td><td>${editableCell(link.id, 'source', endpointId(link.source))}</td><td>${editableCell(link.id, 'target', endpointId(link.target))}</td><td><select aria-label="${escapeHtml(`${link.id} relation`)}" data-edit-id="${escapeHtml(link.id)}" data-edit-field="relation">${['support','oppose','related'].map((relation) => `<option value="${relation}" ${link.relation === relation ? 'selected' : ''}>${t(relation)}</option>`).join('')}</select></td><td>${editableCell(link.id, 'strength', link.strength, 'number')}</td></tr>`).join('')}</tbody>`}
     </table></div>`;
   bindColumnResizers();
+  const nextScroll=dataView.querySelector('.data-table-wrap');
+  nextScroll.scrollTop=scroll.top;nextScroll.scrollLeft=scroll.left;
   dataView.querySelectorAll('[data-entity]').forEach((button) => button.addEventListener('click', () => { dataEntity = button.dataset.entity; dataSelection.clear(); renderDataView(); }));
   dataView.querySelector('#select-all-data')?.addEventListener('change', (event) => {
     dataSelection = event.target.checked ? new Set(records.map((record) => record.id)) : new Set();
@@ -2818,7 +2910,8 @@ function renderDataView() {
     record[field] = event.target.type === 'checkbox' ? event.target.checked : event.target.type === 'number' ? Number(event.target.value) : event.target.value;
     toast(panelText('修改已保存', 'Changes saved'));
   }));
-  dataView.querySelector('#delete-data-button')?.addEventListener('click', () => {
+  dataView.querySelector('#delete-data-button')?.addEventListener('click', async () => {
+    if(dataEntity==='nodes'){await deletePaperNodes([...dataSelection]);return;}
     if (!dataSelection.size || !window.confirm(panelText(`确定删除 ${dataSelection.size} 项？此操作会同时移除关联关系。`, `Delete ${dataSelection.size} items? Connected edges will also be removed.`))) return;
     if (dataEntity === 'nodes') {
       const removed = new Set(dataSelection);
@@ -2830,6 +2923,7 @@ function renderDataView() {
       project.semanticLinks = project.semanticLinks.filter((link) => !dataSelection.has(link.id));
     }
     dataSelection.clear();
+    saveCurrentProject();
     renderDataView();
     updateCounters();
   });
@@ -2914,6 +3008,29 @@ function updateSidebarAvailability() {
   }
 }
 
+function rebuildProcessedGraph() {
+  // Classification and verified relationships now determine positions for every paper.
+  nodes.forEach(node=>{node.fx=null;node.fy=null;node.fz=null;node.viewPositions={};});
+  graphLocked=false;
+  vectorCameras.semantic=null;vectorCameras.timeline=null;
+  Object.values(graph3dCameraStates).forEach(states=>{states.argument=null;states.semantic=null;});
+  Object.values(graph3dInitialized).forEach(states=>{states.argument=false;states.semantic=false;});
+  graph3dDataKey='';
+  rebuildMetadataCitationLinks();
+  buildVectorLinks();
+  if(usesSemanticLayout())loadVectorPositions(view==='table'?graphView:view);
+  else {initializePositions();if(view==='timeline')loadGraphState('timeline');}
+  updateModeButtons();
+  configureSimulation();
+  if(renderMode==='3d' && view!=='table')void renderGraph3D(true);
+  else if(view!=='table'){
+    simulation.stop();simulation.tick(Math.max(30,Math.min(90,Math.round(12000/Math.max(1,nodes.length)))));
+    theory2dFraming.semantic=null;theory2dFraming.timeline=null;
+    fitView(0);
+    if(usesSemanticLayout())saveVectorState(view);else saveGraphState(view);
+    render();
+  }
+}
 function resetLayout() {
   if (usesSemanticLayout()) {
     const positionKey = vectorPositionKey(view);
@@ -2946,6 +3063,43 @@ function resetLayout() {
   toast(panelText('已解除全部固定位置并重新计算布局', 'All positions unpinned and layout recalculated'));
 }
 
+function confirmPaperDeletion(count) {
+  return new Promise(resolve=>{
+    const backdrop=document.createElement('div');backdrop.className='modal-backdrop delete-confirm-backdrop';
+    const previous=document.activeElement;
+    backdrop.innerHTML=`<section class="settings-dialog delete-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-confirm-title"><h2 id="delete-confirm-title">${panelText(`删除 ${count} 篇文献？`,`Delete ${count} papers?`)}</h2><p>${panelText('将移除所选节点及其连线，已保存的原文文件保留。','Selected nodes and their connections will be removed. Saved original files are retained.')}</p><footer><button type="button" data-delete-cancel>${panelText('取消','Cancel')}</button><button type="button" data-delete-confirm>${panelText('确认删除','Confirm delete')}</button></footer></section>`;
+    const finish=value=>{backdrop.remove();previous?.isConnected&&previous.focus();resolve(value);};
+    backdrop.querySelector('[data-delete-cancel]').onclick=()=>finish(false);
+    backdrop.querySelector('[data-delete-confirm]').onclick=()=>finish(true);
+    backdrop.addEventListener('keydown',event=>{
+      if(event.key==='Escape'){event.preventDefault();event.stopPropagation();finish(false);}
+      if(event.key==='Tab'){event.preventDefault();const buttons=[...backdrop.querySelectorAll('button')];buttons[(buttons.indexOf(document.activeElement)+1)%2].focus();}
+    });
+    document.body.append(backdrop);backdrop.querySelector('[data-delete-cancel]').focus();
+  });
+}
+async function deletePaperNodes(ids) {
+  const projectId=currentProjectId;
+  const removed=new Set(ids.filter(id=>nodes.some(n=>n.id===id)));
+  if(!removed.size || removed.size>1 && !await confirmPaperDeletion(removed.size))return;
+  if(currentProjectId!==projectId)return;
+
+  for (const [nodeId, controller] of activePaperTasks) if (removed.has(nodeId)) controller.abort();
+  nodes=nodes.filter(n=>!removed.has(n.id));project.nodes=nodes;
+  for(const key of ['semanticLinks','citationLinks'])project[key]=project[key].filter(e=>!removed.has(endpointId(e.source))&&!removed.has(endpointId(e.target)));
+  for(const id of removed){pendingOriginalFiles.delete(id);selectedNodes.delete(id);searchNodes.delete(id);dataSelection.delete(id);}
+  if(removed.has(selectedNode?.id))selectedNode=null;
+  for(const job of discoveryHistory.filter(j=>j.projectId===projectId)){
+    const before=job.items.length;job.items=job.items.filter(item=>!removed.has(item.nodeId));
+    if(before!==job.items.length){job.removed=(job.removed||0)+before-job.items.length;if(job.items.every(i=>i.stage==='done'))job.status='done';}
+  }
+  tooltip.classList.remove('show');hoveredNode=null;projectIsBlank=!nodes.length;
+  buildVectorLinks();configureSimulation();graph3dDataKey='';
+  updateResearchEntry();renderOverview();renderOverviewState();if(view==='table')renderDataView();render();
+  saveCurrentProject();persistDiscoveryHistory();updateAddPapersButton();renderLiteratureDiscoveryWindow();
+  await localRequest('project',{projectId,project:cleanProjectForExport()}).catch(error=>toast(localizedError(error,language)));
+  toast(panelText(`已删除 ${removed.size} 篇文献，原文文件已保留。`,`Deleted ${removed.size} papers. Original files retained.`));
+}
 function clearCurrentNodeSelection() {
   selectedNode = null;
   selectedNodes.clear();
@@ -2992,6 +3146,8 @@ function applyLanguage() {
   renderSecondaryPanel();
   renderProjectSelectorMenu();
   renderStagedPaperFiles();
+  updateAddPapersButton();
+  document.querySelector('#toast').classList.remove('show');
   renderResearchDesk();
   const institutionDraft = discoveryWindow?.querySelector('#discovery-institution-url')?.value;
   if (institutionDraft !== undefined) discoveryInstitutionUrl = institutionDraft;
@@ -3306,6 +3462,9 @@ function renderProjectSelectorMenu() {
 }
 
 function activateProjectData(candidate, id = candidate.meta?.id || `project-${Date.now()}`) {
+  if(discoveryImporting || discoverySearching || receivingInstitution) return toast(panelText('请先暂停当前检索或等待原文接收完成，再切换项目。','Pause the search or wait for the original transfer before switching projects.'));
+  discoveryResults=[];discoverySelected.clear();discoveryStep='search';activeDiscoveryJobId=null;filterState.journals=[];
+  discoveryNotice='';discoveryProgress='';pendingInstitutionNode=null;expandedHistoryJobs.clear();
   validateImportedProject(candidate);
   simulation.stop();
   project = JSON.parse(JSON.stringify(candidate));
@@ -3345,6 +3504,7 @@ function activateProjectData(candidate, id = candidate.meta?.id || `project-${Da
   renderOverviewState();
   document.querySelector('#project-selector-label').textContent = project.meta.title;
   saveCurrentProject();
+  renderLiteratureDiscoveryWindow();renderPaperImportHistory();
   const initialProjectId=currentProjectId;
   window.setTimeout(() => {
     // A deferred 2D project fit must never override a 3D camera selected meanwhile.
@@ -3391,6 +3551,9 @@ async function importProject(file) {
 }
 
 function createBlankProject({ savePrevious = true } = {}) {
+  if(discoveryImporting || discoverySearching || receivingInstitution) return toast(panelText('请先暂停当前检索或等待原文接收完成，再新建项目。','Pause the search or wait for the original transfer before creating a project.'));
+  discoveryResults=[];discoverySelected.clear();discoveryStep='search';activeDiscoveryJobId=null;filterState.journals=[];
+  discoveryNotice='';discoveryProgress='';pendingInstitutionNode=null;expandedHistoryJobs.clear();
   if (savePrevious) saveCurrentProject();
   simulation.stop();
   currentProjectId = `project-${Date.now()}`;
@@ -3437,6 +3600,7 @@ function createBlankProject({ savePrevious = true } = {}) {
   document.querySelector('#project-selector-label').textContent = project.meta.title;
   saveCurrentProject();
   toast(panelText('已创建空白本地项目', 'Blank local project created'));
+  renderLiteratureDiscoveryWindow();renderPaperImportHistory();
 }
 
 function renderOverviewState() {
@@ -3454,7 +3618,7 @@ function safeJsonFromModel(text) {
 const OPENALEX_WORK_FIELDS = 'id,doi,title,publication_year,cited_by_count,authorships,referenced_works,abstract_inverted_index,primary_location,best_oa_location,type,language';
 
 function normalizedDoi(value = '') {
-  return String(value).replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '').replace(/[\s.,;]+$/g, '').trim();
+  return cleanDoi(value);
 }
 
 function openAlexAbstract(index) {
@@ -3512,7 +3676,8 @@ function applyScholarlyMetadata(node, metadata) {
   if (!metadata) return node;
   if (metadata.title) node.title = metadata.title;
   if (metadata.year) node.year = metadata.year;
-  if (metadata.authors.length) node.authors = metadata.authors;
+  if (metadata.language && metadata.language!=='unknown') node.language = metadata.language;
+  if (metadata.authors?.length) node.authors = metadata.authors;
   if (metadata.doi) node.doi = metadata.doi;
   if (metadata.abstract) {
     node.abstract = metadata.abstract;
@@ -3592,7 +3757,8 @@ function closeLiteratureDiscoveryWindow() {
 }
 
 function discoveryOption(label, group, value, current) {
-  return `<button class="discovery-choice ${current === value ? 'active' : ''}" type="button" data-discovery-filter="${group}" data-discovery-value="${value}" aria-pressed="${current === value}">${label}</button>`;
+  const beta=group==='source'&&['combined','institution'].includes(value);
+  return `<button class="discovery-choice ${current === value ? 'active' : ''} ${beta?'discovery-source-beta':''}" type="button" data-discovery-filter="${group}" data-discovery-value="${value}" aria-pressed="${current === value}">${label}${beta?`<sup class="discovery-beta" title="${panelText('测试中','In testing')}" aria-label="${panelText('测试中','In testing')}">beta</sup>`:''}</button>`;
 }
 
 function discoveryResultMarkup(metadata, index) {
@@ -3600,54 +3766,220 @@ function discoveryResultMarkup(metadata, index) {
   const checked = discoverySelected.has(key);
   const authorLine = compactAuthorLabel(metadata.authors || []);
   const type = String(metadata.articleType || 'article').replaceAll('-', ' ');
-  const relevance = metadata.relevanceReason || panelText('学术来源检索记录，相关性待分析。','Scholarly search record; relevance not yet analyzed.');
   return `<article class="discovery-result-card ${checked ? 'selected' : ''}">
     <label class="discovery-check"><input type="checkbox" data-discovery-result="${escapeHtml(key)}" ${checked ? 'checked' : ''}><span aria-hidden="true">✓</span></label>
     <span class="discovery-result-index">${index + 1}</span>
     <div class="discovery-result-copy">
       <strong>${escapeHtml(metadata.title || panelText('未命名论文', 'Untitled paper'))}</strong>
       <p>${escapeHtml(authorLine || panelText('作者信息待补充', 'Author data pending'))}<i>·</i>${escapeHtml(String(metadata.year || '—'))}<i>·</i>${escapeHtml(metadata.journal || panelText('期刊待确认', 'Journal pending'))}<i>·</i>${panelText('被引', 'Cited')} ${metadata.citations ?? '—'}</p>
-      <div class="discovery-result-tags"><span>${escapeHtml(type)}</span><span>${escapeHtml(metadata.metadataSource||'')}</span>${metadata.doi ? '<span>DOI</span>' : ''}<span>${metadata.pdfUrl ? panelText('有开放全文地址，下载待验证','Open PDF link; download pending') : metadata.isOpenAccess?panelText('开放记录，全文待查找','Open record; locating PDF'):panelText('仅文献信息 / 需访问权限','Metadata only / access required')}</span><em>${escapeHtml(relevance)}</em><a href="${escapeHtml(metadata.sourceUrl)}" target="_blank" rel="noopener noreferrer">${panelText('查看来源', 'View source')}</a></div>
+      <div class="discovery-result-tags"><span>${escapeHtml(type)}</span><span>${escapeHtml(metadata.metadataSource||'')}</span>${metadata.doi ? '<span>DOI</span>' : ''}<span>${metadata.pdfUrl ? panelText('有开放全文地址，下载待验证','Open PDF link; download pending') : metadata.isOpenAccess?panelText('开放记录，全文待查找','Open record; locating PDF'):panelText('仅文献信息 / 需访问权限','Metadata only / access required')}</span><a href="${escapeHtml(metadata.sourceUrl)}" target="_blank" rel="noopener noreferrer">${panelText('查看来源', 'View source')}</a></div>
     </div>
 
   </article>`;
 }
 
+function bindDiscoveryDivider() {
+  const body=discoveryWindow?.querySelector('.discovery-window-body'),divider=body?.querySelector('.discovery-divider');
+  if(!divider)return;
+  const apply=ratio=>{discoverySplit=Math.max(.25,Math.min(.65,ratio));body.style.setProperty('--discovery-left',`${discoverySplit*100}%`);divider.setAttribute('aria-valuenow',Math.round(discoverySplit*100));};
+  apply(discoverySplit);
+  divider.addEventListener('pointerdown',event=>{if(event.button!==0)return;event.stopPropagation();event.preventDefault();divider.setPointerCapture(event.pointerId);divider.classList.add('dragging');});
+  divider.addEventListener('pointermove',event=>{if(!divider.hasPointerCapture(event.pointerId))return;const rect=body.getBoundingClientRect();apply((event.clientX-rect.left)/rect.width);});
+  for(const name of ['pointerup','pointercancel','lostpointercapture'])divider.addEventListener(name,event=>{divider.classList.remove('dragging');if(divider.hasPointerCapture(event.pointerId))divider.releasePointerCapture(event.pointerId);});
+  divider.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight','Home'].includes(event.key))return;event.preventDefault();apply(event.key==='Home'?.4:discoverySplit+(event.key==='ArrowLeft'?-.02:.02));});
+}
+function historyMarkup() {
+  const status = {searching:panelText('检索中','Searching'),ready:panelText('待导入','Ready to import'),running:panelText('处理中','Processing'),paused:panelText('已暂停','Paused'),attention:panelText('待补全','Needs attention'),error:panelText('未完成','Incomplete'),done:panelText('已完成','Complete')};
+  const jobs=discoveryHistory.filter(j=>j.projectId===currentProjectId);
+  const meter=(label,value,total)=>`<div class="history-meter"><span>${label}<b>${value}/${total}</b></span><progress max="${Math.max(1,total)}" value="${value}"></progress></div>`;
+  return `<section class="discovery-history" aria-label="${panelText('检索与处理历史','Search and processing history')}"><div class="history-heading"><h3>${panelText('检索与处理历史','Search and processing history')}</h3><span>${panelText('按阶段保存，继续时跳过已完成步骤','Stages are saved; resume skips completed work')}</span></div>${jobs.length?jobs.map(job=>{
+    const count=jobCounts(job),pages=job.items.find(i=>i.stage==='converting')?.pages;
+    const open=expandedHistoryJobs.has(job.id);
+    const title=job.kind==='local'?panelText(`本地文件导入（${job.found} 篇）`,`Local file import (${job.found})`):job.query;
+    return `<article class="discovery-history-row">
+      <div class="history-summary"><span class="history-summary-copy"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(new Date(job.createdAt).toLocaleString(language==='en'?'en-GB':'zh-CN'))}</small></span><div class="history-summary-actions"><button type="button" data-history-delete="${escapeHtml(job.id)}" title="${panelText('仅删除记录，保留论文和文件；正在进行的处理不受影响。','Delete this record only; papers, files and ongoing processing are retained.')}">${panelText('删除该记录','Delete record')}</button><button type="button" data-history-resume="${escapeHtml(job.id)}" ${!count.total || count.completed===count.total || discoverySearching || discoveryImporting && job.id!==activeDiscoveryJobId?'disabled':''}>${count.total && count.completed===count.total?panelText('完成','Complete'):discoveryImporting && job.id===activeDiscoveryJobId?panelText('暂停','Pause'):panelText('继续','Continue')}</button><button type="button" data-history-expand="${escapeHtml(job.id)}" aria-expanded="${open}">${open?panelText('收起','Collapse'):panelText('展开','Expand')}</button></div><span class="history-state">${escapeHtml(status[job.status]||job.status)}</span></div>
+      <div class="history-row-progress">${meter(panelText('原文获取','Originals'),count.downloaded,count.total)}${meter(panelText('MD 转换','Markdown'),count.converted,count.downloaded)}${meter(panelText('分析','Analysis'),count.analyzed,count.converted)}</div>
+      <div class="history-details" ${open?'':'hidden'}>${job.notice?`<p class="history-report">${escapeHtml(job.items.length?importJobReport(job):localizedError(job.notice,language))}</p>`:''}${pages?`<small>${panelText(`当前 PDF：${pages.done}/${pages.total} 页`,`Current PDF: ${pages.done}/${pages.total} pages`)}</small>`:''}${job.error?`<small class="history-error">${escapeHtml(localizedError(job.error,language))}</small>`:''}
+      ${job.items.map(i=>`<div class="history-paper-row"><span>${escapeHtml(i.title)}</span><small>${i.error?escapeHtml(localizedError(i.error,language)):i.stage==='done'?panelText('已完成','Complete'):panelText('处理中或待处理','Processing or pending')}</small>${i.rejectedRelationships?`<small>${escapeHtml(relationshipWarningText(i))}</small>`:''}${i.error?`<em>${panelText(`${i.downloaded?'原文已保留':'原文未获取，已跳过'}${i.converted?' · MD 已保留':''} · 可稍后继续`,`${i.downloaded?'Original retained':'Original unavailable; skipped'}${i.converted?' · MD retained':''} · Continue when ready`)}</em>`:''}${!i.downloaded&&job.projectId===currentProjectId?`<button type="button" class="institution-open-button" data-history-institution="${escapeHtml(i.nodeId)}">${panelText('通过机构获取','Get through institution')}</button>`:''}</div>`).join('')}
+      ${job.results?.length?`<div class="history-row-actions"><button type="button" data-history-results="${escapeHtml(job.id)}" ${discoveryImporting||discoverySearching?'disabled':''}>${panelText('查看结果','View results')}</button></div>`:''}</div></article>`;
+  }).join(''):`<p class="history-empty">${panelText('开始检索后，这里会自动记录每次检索及原文处理进度。','Each search and its original-processing progress will appear here.')}</p>`}</section>`;
+}
+function bindHistoryActions(host, rerender) {
+  host.querySelectorAll('[data-history-delete]').forEach(button=>button.addEventListener('click',()=>{
+    const id=button.dataset.historyDelete;
+    const job=discoveryHistory.find(j=>j.id===id&&j.projectId===currentProjectId);
+    if(!job)return;
+    // The running worker owns its job reference. Removing the history entry
+    // must never cancel processing or remove project papers and their files.
+    discoveryHistory=discoveryHistory.filter(j=>j!==job);
+    expandedHistoryJobs.delete(id);
+    persistDiscoveryHistory();
+    rerender();
+    toast(panelText('记录已删除，论文及文件已保留。','Record deleted; papers and files retained.'));
+  }));
+  host.querySelectorAll('[data-history-institution]').forEach(button=>button.addEventListener('click',()=>void openInstitutionWindow(nodes.find(n=>n.id===button.dataset.historyInstitution))));
+  host.querySelectorAll('[data-history-expand]').forEach(button=>button.addEventListener('click',()=>{
+    const id=button.dataset.historyExpand;
+    expandedHistoryJobs.has(id)?expandedHistoryJobs.delete(id):expandedHistoryJobs.add(id);
+    rerender();
+  }));
+  host.querySelectorAll('[data-history-results]').forEach(button=>button.addEventListener('click',()=>{
+    const job=discoveryHistory.find(j=>j.id===button.dataset.historyResults&&j.projectId===currentProjectId);
+    if(job){showHistoricalResults(job);discoveryHistoryOpen=false;closeModal('paper-import');openLiteratureDiscoveryWindow();renderLiteratureDiscoveryWindow();}
+  }));
+  host.querySelectorAll('[data-history-resume]').forEach(button=>button.addEventListener('click',()=>{
+    if(discoveryImporting){pauseActiveImport();return;}
+    const job=discoveryHistory.find(j=>j.id===button.dataset.historyResume&&j.projectId===currentProjectId);
+    if(job){showHistoricalResults(job);void runImportJob(job);}
+  }));
+}
+let paperImportHistoryOpen=false,pendingInstitutionNode=null;
+
+async function openInstitutionWindow(node=null,useSaved=true){
+  let saved=null;try{saved=await desktop?.institution?.('saved');if(saved?.saved&&!discoveryInstitutionUrl)discoveryInstitutionUrl=saved.portalUrl||saved.url;}catch{}
+  if(!discoveryInstitutionUrl){pendingInstitutionNode=node?{id:node.id,projectId:currentProjectId}:null;discoveryInstitutionOpen=true;openLiteratureDiscoveryWindow();renderLiteratureDiscoveryWindow();return;}
+  if(!desktop?.institution){toast(panelText('软件内机构登录需要桌面安装版。网页预览请使用浏览器下载后导入。','In-app institution sign-in requires the desktop app. In web preview, download using your browser and import the file.'));return;}
+  try{
+    await desktop.institution('open',{portalUrl:discoveryInstitutionUrl,url:node?paperSource(node):discoveryInstitutionUrl,useSaved:useSaved&&!node,doi:node?.doi||'',title:node?.title||'',projectId:currentProjectId,projectTitle:project.meta.title,nodeId:node?.id||'',language});
+  }
+  catch(error){toast(panelText('无法打开机构窗口：','Could not open institution window: ')+localizedError(error,language));}
+}
+const institutionNotices=new Set();
+const institutionAnalysisQueue=new Map();
+async function receiveInstitutionDownloads(){
+  if(!desktop?.institution||receivingInstitution||importProgress.processing)return;
+  receivingInstitution=true;
+  try{
+    const receipts=await desktop.institution('list');
+    // Never replace the source of a paper while its analysis is reading it.
+    const receipt=receipts.find(r=>r.context.projectId===currentProjectId&&!activePaperTasks.has(r.context.nodeId));
+    if(!receipt){
+      const other=receipts.find(r=>r.context.projectId!==currentProjectId);
+      if(other&&!institutionNotices.has(other.id)){institutionNotices.add(other.id);toast(panelText('机构 PDF 已保存，请切换回下载时的项目继续导入。','Institution PDF saved. Switch back to its project to continue importing.'));}
+      if(!discoveryImporting&&!discoverySearching){
+        const queued=[...institutionAnalysisQueue.values()].find(q=>q.projectId===currentProjectId);
+        if(queued){institutionAnalysisQueue.delete(queued.nodeId);const job=discoveryHistory.find(j=>j.id===queued.jobId&&j.projectId===currentProjectId);if(job&&job.status!=='paused')await runImportJob(job,queued.nodeId);}
+      }
+      return;
+    }
+    await loadDiscoveryHistory();
+    let node=nodes.find(n=>n.id===receipt.context.nodeId);
+    if(!node && !window.confirm(panelText(`已下载「${receipt.fileName}」。导入当前项目并转换分析？`,`Downloaded “${receipt.fileName}”. Import into this project and process?`))){await desktop.institution('acknowledge',{id:receipt.id});return;}
+    const projectId=currentProjectId;
+    const {data}=await desktop.institution('read',{id:receipt.id});
+    if(projectId!==currentProjectId)return;
+    const file=new File([Uint8Array.from(atob(data),c=>c.charCodeAt(0))],receipt.fileName,{type:'application/pdf'});
+    if(!project.theories.some(t=>t.id==='unclassified'))project.theories.push({id:'unclassified',label:'待分类',labelEn:'Unclassified',color:'#7c6ca8'});
+    enabledTheories.add('unclassified');
+    const alreadyReceived=node?.institutionReceiptId===receipt.id;
+    if(node&&!alreadyReceived){await saveOriginalFile(projectId,node,file);Object.assign(node,{fileName:file.name,analysisStatus:'pending',processingError:''});}
+    else if(!node)node=await buildImportedNode(file,nodes.length);
+    let job=discoveryHistory.find(j=>j.projectId===projectId&&j.items.some(i=>i.nodeId===node.id));
+    if(!job){job=createImportJob(projectId,panelText('机构原文导入','Institution original import'),{source:'institution',institutionUrl:discoveryInstitutionUrl});job.kind='institution';job.status='ready';discoveryHistory.unshift(job);}
+    const paused=job.status==='paused';
+    let item=job.items.find(i=>i.nodeId===node.id);
+    if(!item){item={nodeId:node.id,title:node.title};job.items.push(item);}
+    if(!alreadyReceived)Object.assign(item,{downloaded:true,converted:false,analyzed:false,stage:'pending',error:''});
+    syncPaperProgress(node,item);
+    node.institutionReceiptId=receipt.id;project.nodes=nodes;project.meta.mock=false;projectIsBlank=false;
+    saveCurrentProject();persistDiscoveryHistory();
+    renderLiteratureDiscoveryWindow();renderPaperImportHistory();updateAddPapersButton();
+    if(selectedNode?.id===node.id)renderInspector(node);
+    await historyWrite;
+    await localRequest('project',{projectId,project:cleanProjectForExport()});
+    await desktop.institution('acknowledge',{id:receipt.id});
+    configureSimulation(false);renderOverviewState();render();
+    if(paused)toast(panelText('机构 PDF 已补充。任务保持暂停，可在历史记录中继续。','Institution PDF added. The task remains paused; continue from history.'));
+    else if(item.stage!=='done'){
+      if(discoveryImporting||discoverySearching)institutionAnalysisQueue.set(node.id,{nodeId:node.id,projectId,jobId:job.id});
+      else await runImportJob(job,node.id);
+    }
+  }catch(error){const key='error:'+error.message;if(!institutionNotices.has(key)){institutionNotices.add(key);toast(panelText('机构原文接收未完成，文件仍保存在数据文件夹：','Institution transfer incomplete; the file remains in your data folder: ')+localizedError(error,language));}}
+  finally{receivingInstitution=false;}
+}
+function renderPaperImportHistory() {
+  const modal=document.querySelector('#paper-import-modal');
+  const toggle=document.querySelector('#paper-import-history-toggle');
+  toggle.setAttribute('aria-pressed',String(paperImportHistoryOpen));
+  toggle.classList.toggle('processing',discoveryImporting || importProgress.processing);
+  if(modal.hidden)return;
+  const host=document.querySelector('#paper-import-history');
+  modal.querySelector('.paper-import-body').hidden=paperImportHistoryOpen;
+  modal.querySelector('.paper-import-dialog > footer').hidden=paperImportHistoryOpen;
+  host.hidden=!paperImportHistoryOpen;
+  if(paperImportHistoryOpen){const top=host.scrollTop;host.innerHTML=historyMarkup();bindHistoryActions(host,renderPaperImportHistory);host.scrollTop=top;}
+}
+let historyLoaded;
+async function loadDiscoveryHistory() {
+  historyLoaded ||= localRequest('discovery-history').then(({jobs})=>{
+    for (const job of restoreJobs(JSON.stringify(jobs))) if (!discoveryHistory.some(j=>j.id===job.id)) discoveryHistory.push(job);
+    discoveryHistory.sort((a,b)=>b.createdAt.localeCompare(a.createdAt));
+  }).catch(()=>{});
+  await historyLoaded;
+}
+function showHistoricalResults(job) {
+  if(job.projectId!==currentProjectId)return;
+  activeDiscoveryJobId=job.id;
+  discoveryResults=job.results || [];
+  discoverySelected=new Set();discoveryStep=discoveryResults.length?'results':'search';
+  discoveryNotice=job.notice||'';
+}
 function renderLiteratureDiscoveryWindow() {
   if (!discoveryWindow?.isConnected) return;
+  discoveryWindow.setAttribute('aria-label',panelText('文献发现','Literature discovery'));
+  const scrollPositions=['.discovery-history','.discovery-conditions','.discovery-result-list'].map(selector=>[selector,discoveryWindow.querySelector(selector)?.scrollTop||0]);
   const resultCount = discoveryResults.length;
   const selectedCount = discoverySelected.size;
+  const notice=activeImportJob()?.notice===discoveryNotice && activeImportJob()?.items.length?importJobReport(activeImportJob()):localizedError(discoveryNotice,language);
+  const live=discoveryImporting&&activeImportJob()?jobCounts(activeImportJob()):null;
+  const progress=live?panelText(`原文 ${live.downloaded}/${live.total} · MD ${live.converted}/${live.downloaded} · 分析 ${live.analyzed}/${live.converted}`,`Originals ${live.downloaded}/${live.total} · MD ${live.converted}/${live.downloaded} · Analysis ${live.analyzed}/${live.converted}`):localizedError(discoveryProgress,language);
   const resultBody = discoveryStep === 'results'
     ? `<div class="discovery-results-toolbar"><div><strong>${panelText(`检索结果（共 ${resultCount} 篇）`, `Search results (${resultCount})`)}</strong><span>${panelText(`已选 ${selectedCount} 篇，等待确认导入`, `${selectedCount} selected, ready to import`)}</span></div><label class="discovery-select-all"><input id="discovery-select-all" type="checkbox" ${resultCount && selectedCount === resultCount ? 'checked' : ''}><span>${panelText('全选本页', 'Select all')}</span></label></div>
       <div class="discovery-result-list">${discoveryResults.length ? discoveryResults.map(discoveryResultMarkup).join('') : `<p class="discovery-empty-copy">${panelText('没有找到符合当前条件的新论文。请调整左侧条件后重新检索。', 'No new matching papers. Adjust your filters and search again.')}</p>`}</div>
-      <div class="discovery-results-footer"><p><span>i</span>${panelText('来源记录已核验。确认后补全引用信息、获取开放全文并保存 PDF / MD；受限原文需手动补充。', 'Source records verified. Confirm to enrich references, retrieve open full text and save PDF / MD. Restricted originals need manual import.')}</p><div><button id="discovery-back" type="button">${panelText('返回修改条件', 'Back to filters')}</button><button id="discovery-confirm" class="discovery-confirm" type="button" ${selectedCount ? '' : 'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg>${panelText('导入并获取可用全文', 'Import and get available full text')}</button></div></div>`
+      <div class="discovery-results-footer"><p><span>i</span>${panelText('来源记录已核验。确认后获取全文并保存，请保持网络畅通。受限原文需手动补充。', 'Source records verified. Confirm to retrieve and save full text. Keep your network connected; restricted originals must be added manually.')}</p><div><button id="discovery-back" type="button">${panelText('返回修改条件', 'Back to filters')}</button><button id="discovery-confirm" class="discovery-confirm" type="button" ${selectedCount ? '' : 'disabled'}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12m0 0 4-4m-4 4-4-4M5 15v4h14v-4"/></svg>${panelText('导入并获取可用全文', 'Import and get available full text')}</button></div></div>`
     : `<div class="discovery-results-empty"><div class="discovery-empty-orbit"><span></span><span></span><i>✦</i></div><strong>${panelText('检索结果将在这里确认', 'Review results here')}</strong><p>${panelText('填写左侧研究主题并开始检索。结果不会立即写入项目，确认选择后才会导入。', 'Describe your topic and start a search. Nothing is added until you confirm your selection.')}</p></div>`;
 
   discoveryWindow.innerHTML = `<header class="discovery-window-header">
       <div class="discovery-window-title"><img class="tool-window-logo" src="${BRAND_MARK}" alt=""><div><h2>${panelText('文献发现', 'Literature discovery')}</h2><p>${panelText('描述研究主题，筛选文献范围，并确认导入结果', 'Describe a topic, refine the scope, and confirm what to import')}</p></div></div>
       <div class="discovery-stepper" aria-label="${panelText('检索进度', 'Search progress')}"><span class="active"><i>1</i>${panelText('检索条件', 'Search filters')}${discoveryStep === 'results' ? '<b>✓</b>' : ''}</span><em></em><span class="${discoveryStep === 'results' ? 'active current' : ''}"><i>2</i>${panelText('结果确认', 'Confirm results')}</span></div>
-      <button id="close-literature-discovery" class="discovery-window-close" type="button" aria-label="${panelText('关闭文献发现', 'Close literature discovery')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+      <div class="discovery-header-actions"><button id="discovery-browser-open" type="button" title="${panelText('打开浏览器','Open browser')}" aria-label="${panelText('打开浏览器','Open browser')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M7 6.5h.1M10 6.5h.1"/></svg></button><button id="discovery-search-toggle" type="button" aria-label="${panelText('文献发现','Literature discovery')}" aria-pressed="${!discoveryHistoryOpen}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5M10.5 7.5v6m-3-3h6"/></svg></button><button id="discovery-history-toggle" class="${discoveryImporting?'processing':''}" type="button" aria-label="${panelText('检索与处理历史','Search and processing history')}" aria-pressed="${discoveryHistoryOpen}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 10a9 9 0 1 1 1 7M3 4v6h6m3-4v6l4 2"/></svg></button><button id="close-literature-discovery" class="discovery-window-close" type="button" aria-label="${panelText('关闭文献发现', 'Close literature discovery')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
     </header>
-    ${discoveryInstitutionOpen ? `<form class="discovery-institution-popover" id="discovery-institution-form"><button class="discovery-institution-dismiss" type="button" aria-label="${panelText('关闭机构入口设置', 'Close institution settings')}" data-close-institution>×</button><label for="discovery-institution-url"><strong>${panelText('机构图书馆入口', 'Institution library portal')}</strong><span>${panelText('请先在浏览器中登录机构图书馆，并填写机构图书馆网页地址。此入口不会共享登录状态；受限全文请从图书馆下载后导入。', 'Sign in to your institution library in the browser and enter its library website URL. This does not share your session; download restricted originals through the library and import them.')}</span></label><div><input id="discovery-institution-url" type="url" required placeholder="https://library.example.edu" value="${escapeHtml(discoveryInstitutionUrl)}"><button type="submit">${panelText('保存', 'Save')}</button></div></form>` : ''}
+${discoveryInstitutionOpen ? `<form class="discovery-institution-popover" id="discovery-institution-form"><button class="discovery-institution-dismiss" type="button" aria-label="${panelText('关闭机构入口设置', 'Close institution settings')}" data-close-institution>×</button><label for="discovery-institution-url"><strong>${panelText('出版商或机构图书馆网址', 'Publisher or institution library URL')}</strong></label><div><input id="discovery-institution-url" type="url" required placeholder="" value="${escapeHtml(discoveryInstitutionUrl)}"><button type="submit">${panelText('保存设置', 'Save settings')}</button></div></form>` : ''}
     <div class="discovery-window-body">
       <section class="discovery-conditions">
         <div class="discovery-section-heading"><h3><span>1.</span> ${panelText('检索条件', 'Search filters')}</h3><small>${discoveryStep === 'results' ? panelText('（已完成）', '(complete)') : panelText('（待填写）', '(required)')}</small></div>
         <label class="discovery-query-field"><strong>${panelText('研究主题 / 需求描述', 'Research topic / question')}</strong><textarea id="discovery-window-query" maxlength="500" placeholder="${panelText('例如：生成式 AI 如何影响大学生学习、批判性思维与学习策略？', 'Example: How does generative AI affect university learning and critical thinking?')}">${escapeHtml(discoveryQuery)}</textarea><span id="discovery-query-count">${discoveryQuery.length}/500</span></label>
         <div class="discovery-filter-row"><span class="discovery-filter-label"><i>▣</i>${panelText('年份范围', 'Years')}</span><div class="discovery-year-range"><input id="discovery-year-start" type="number" inputmode="numeric" min="1900" max="${new Date().getFullYear()}" value="${escapeHtml(discoveryFilters.yearStart)}" aria-label="${panelText('起始年份', 'Start year')}"><b>${panelText('至', 'to')}</b><input id="discovery-year-end" type="number" inputmode="numeric" min="1900" max="${new Date().getFullYear()}" value="${escapeHtml(discoveryFilters.yearEnd)}" aria-label="${panelText('结束年份', 'End year')}"></div></div>
         <div class="discovery-filter-row"><span class="discovery-filter-label"><i>◎</i>${panelText('文献语言', 'Language')}</span><div class="discovery-choices">${discoveryOption(panelText('不限', 'Any'), 'language', 'any', discoveryFilters.language)}${discoveryOption(panelText('英文', 'English'), 'language', 'en', discoveryFilters.language)}${discoveryOption(panelText('中文', 'Chinese'), 'language', 'zh', discoveryFilters.language)}</div></div>
-        <div class="discovery-filter-row"><span class="discovery-filter-label"><i>□</i>${panelText('文献类型', 'Type')}</span><div class="discovery-choices">${discoveryOption(panelText('不限', 'Any'), 'articleType', 'any', discoveryFilters.articleType)}${discoveryOption(panelText('元分析', 'Meta-analysis'), 'articleType', 'meta', discoveryFilters.articleType)}${discoveryOption(panelText('综述', 'Review'), 'articleType', 'review', discoveryFilters.articleType)}${discoveryOption(panelText('研究', 'Research'), 'articleType', 'research', discoveryFilters.articleType)}${discoveryOption(panelText('会议', 'Conference'), 'articleType', 'conference', discoveryFilters.articleType)}</div></div>
-        <div class="discovery-filter-row"><span class="discovery-filter-label"><i>≋</i>${panelText('数据来源', 'Sources')}</span><div class="discovery-choices">${discoveryOption(panelText('开放获取', 'Open access'), 'source', 'open', discoveryFilters.source)}${discoveryOption(panelText('机构登录', 'Institution sign-in'), 'source', 'institution', discoveryFilters.source)}</div></div>
+        <div class="discovery-filter-row"><span class="discovery-filter-label"><i>□</i>${panelText('文献类型', 'Type')}</span><div class="discovery-choices">${discoveryOption(panelText('不限', 'Any'), 'articleType', 'any', discoveryFilters.articleType)}${discoveryOption(panelText('meta分析', 'Meta-analysis'), 'articleType', 'meta', discoveryFilters.articleType)}${discoveryOption(panelText('综述', 'Review'), 'articleType', 'review', discoveryFilters.articleType)}${discoveryOption(panelText('研究', 'Research'), 'articleType', 'research', discoveryFilters.articleType)}${discoveryOption(panelText('会议', 'Conference'), 'articleType', 'conference', discoveryFilters.articleType)}</div></div>
+        <div class="discovery-filter-row"><span class="discovery-filter-label"><i>≋</i>${panelText('数据来源', 'Sources')}</span><div class="discovery-choices">${discoveryOption(panelText('开放获取', 'Open access'), 'source', 'open', discoveryFilters.source)}${discoveryOption(panelText('开放获取+机构登录', 'Open + institution'), 'source', 'combined', discoveryFilters.source)}${discoveryOption(panelText('机构登录', 'Institution sign-in'), 'source', 'institution', discoveryFilters.source)}</div></div>
         <div class="discovery-filter-row"><span class="discovery-filter-label"><i>↕</i>${panelText('排序方式', 'Sort')}</span><div class="discovery-choices">${discoveryOption(panelText('综合', 'Combined'), 'sort', 'combined', discoveryFilters.sort)}${discoveryOption(panelText('相关度', 'Relevance'), 'sort', 'relevance', discoveryFilters.sort)}${discoveryOption(panelText('最新', 'Newest'), 'sort', 'newest', discoveryFilters.sort)}${discoveryOption(panelText('被引量', 'Citations'), 'sort', 'cited', discoveryFilters.sort)}</div></div>
         <div class="discovery-filter-row discovery-count-row"><span class="discovery-filter-label"><i>#</i>${panelText('检索数量','Search count')}</span><div class="discovery-choices">${COUNT_OPTIONS.map(n=>discoveryOption(String(n),'resultCount',String(n),discoveryCustomCount?'custom':String(discoveryFilters.resultCount))).join('')}${discoveryOption(panelText('自定义','Custom'),'resultCount','custom',discoveryCustomCount?'custom':String(discoveryFilters.resultCount))}${discoveryCustomCount?`<input id="discovery-result-count" type="number" min="5" max="100" step="1" value="${escapeHtml(discoveryFilters.resultCount)}" aria-label="${panelText('自定义检索数量（5–100）','Custom search count (5–100)')}">`:''}</div></div>
-        <aside class="discovery-strategy"><strong>✦ ${panelText('检索与导入', 'Search and import')}</strong><p>${panelText('模型制定策略并分析；软件检索 OpenAlex 等真实来源。检索数量不等于成功下载数量，不足时不凑数。', 'Your model plans and analyzes; LitGraph searches real scholarly sources. The target counts records, not guaranteed downloads.')}</p>${discoveryFilters.source==='institution'?`<p>${panelText('机构网址仅为入口，不代表已连接登录状态。','A library URL is a portal, not an authenticated connection.')} <a href="${escapeHtml(/^https?:\/\//i.test(discoveryInstitutionUrl)?discoveryInstitutionUrl:'#')}" target="_blank" rel="noopener noreferrer">${panelText('打开机构入口','Open library portal')}</a></p>`:''}</aside>
-        ${discoveryNotice ? `<p role="status" class="discovery-notice">${escapeHtml(discoveryNotice)}</p>` : ''}
-        ${discoveryProgress?`<p class="discovery-progress" role="status" aria-live="polite">${escapeHtml(discoveryProgress)}</p>`:''}
+        <aside class="discovery-strategy"><strong>✦ ${panelText('检索与导入', 'Search and import')}</strong><p>${panelText('模型生成中英文检索词组，软件检索真实来源并排序。部分原文可能受限，实际导入数量可能少于检索数量。', 'AI plans bilingual queries; LitGraph searches and ranks real sources. Access restrictions may reduce the final import count.')}</p></aside>
+        ${activeImportJob()?.searchReport ? `<div class="discovery-channel-report"><strong>${panelText('已检索渠道','Searched channels')}</strong><span>${escapeHtml(activeImportJob().searchReport.sources.map(source=>source.replace('Institution browser: ',panelText('机构页面：','Institution: '))).join(panelText('、',', '))||panelText('暂无完成的渠道','No completed channels'))}</span><small>${panelText('检索词组（含原始输入）：','Queries (including original input): ')}${escapeHtml(String(activeImportJob().searchReport.queries.length))}</small>${activeImportJob().searchReport.warnings?.length?`<details><summary>${panelText('查看渠道说明','Channel details')}</summary><p>${escapeHtml(activeImportJob().searchReport.warnings.join('; '))}</p></details>`:''}${activeImportJob().searchReport.sourceReports.filter(r=>r.status==='failed').map(r=>`<small>${panelText('未完成：','Not completed: ')}${r.source==='institution'?panelText('机构登录','Institution'):panelText('开放获取','Open access')}</small>`).join('')}</div>` : ''}
+        ${discoveryNotice ? `<p role="status" class="discovery-notice">${escapeHtml(activeImportJob()?.status==='ready'&&activeImportJob()?.noticeI18n?activeImportJob().noticeI18n[language]:notice)}</p>` : ''}
+        ${discoveryProgress?`<p class="discovery-progress" role="status" aria-live="polite">${escapeHtml(progress)}</p>`:''}
         <button id="start-discovery" class="discovery-search-button" type="button" ${discoveryImporting ? 'disabled' : ''}>${discoverySearching ? panelText('停止检索', 'Stop search') : `✦ ${panelText('开始检索', 'Start search')}`}</button>
       </section>
+      <div class="discovery-divider" role="separator" tabindex="0" aria-orientation="vertical" aria-label="${panelText('调整检索条件和结果的宽度','Resize filters and results')}" aria-valuemin="25" aria-valuemax="65" aria-valuenow="${Math.round(discoverySplit*100)}"></div>
       <section class="discovery-results"><div class="discovery-section-heading"><h3><span>2.</span> ${panelText('结果确认', 'Confirm results')}</h3><small>${discoveryStep === 'results' ? panelText('（待确认）', '(ready for review)') : panelText('（等待检索）', '(waiting)')}</small></div>${resultBody}</section>
     </div>`;
 
   if (discoverySearching||discoveryImporting) discoveryWindow.querySelectorAll('[data-discovery-filter], #discovery-year-start, #discovery-year-end, #discovery-window-query, #discovery-result-count, #discovery-back, #discovery-select-all, [data-discovery-result]').forEach((control) => { control.disabled = true; });
+  discoveryWindow.querySelector('#discovery-browser-open').addEventListener('click',async()=>{
+    if(!desktop?.institution){toast(panelText('内置浏览器需要桌面安装版。','The built-in browser requires the desktop app.'));return;}
+    try{await desktop.institution('open',{blank:true,useSaved:true,projectId:currentProjectId,projectTitle:project.meta.title,language});}
+    catch(error){toast(panelText('无法打开浏览器：','Could not open browser: ')+localizedError(error,language));}
+  });
+  discoveryWindow.querySelector('#discovery-history-toggle').addEventListener('click',()=>{discoveryHistoryOpen=!discoveryHistoryOpen;renderLiteratureDiscoveryWindow();});
+  discoveryWindow.querySelector('#discovery-search-toggle').addEventListener('click',()=>{discoveryHistoryOpen=false;renderLiteratureDiscoveryWindow();});
+  if(discoveryHistoryOpen){
+    discoveryWindow.querySelector('.discovery-window-body').hidden=true;
+    discoveryWindow.insertAdjacentHTML('beforeend',historyMarkup());
+    bindHistoryActions(discoveryWindow,renderLiteratureDiscoveryWindow);
+  }
+  for(const [selector,top] of scrollPositions){const el=discoveryWindow.querySelector(selector);if(el)el.scrollTop=top;}
+  bindDiscoveryDivider();
   discoveryWindow.querySelector('#close-literature-discovery')?.addEventListener('click', closeLiteratureDiscoveryWindow);
   const queryField = discoveryWindow.querySelector('#discovery-window-query');
   queryField?.addEventListener('input', () => {
@@ -3663,7 +3995,7 @@ function renderLiteratureDiscoveryWindow() {
     if(key==='resultCount'){discoveryCustomCount=button.dataset.discoveryValue==='custom';if(!discoveryCustomCount)discoveryFilters.resultCount=Number(button.dataset.discoveryValue);}
     else discoveryFilters[key] = button.dataset.discoveryValue;
     invalidateDiscoveryResults();
-    if (key === 'source') discoveryInstitutionOpen = button.dataset.discoveryValue === 'institution';
+    if (key === 'source') { discoveryInstitutionOpen = false; if(usesInstitution(button.dataset.discoveryValue))void openInstitutionWindow(); }
     renderLiteratureDiscoveryWindow();
   }));
   discoveryWindow.querySelector('#discovery-result-count')?.addEventListener('input',event=>{discoveryFilters.resultCount=event.target.value;invalidateDiscoveryResults();});
@@ -3671,7 +4003,7 @@ function renderLiteratureDiscoveryWindow() {
     discoveryInstitutionOpen = false;
     renderLiteratureDiscoveryWindow();
   });
-  discoveryWindow.querySelector('#discovery-institution-form')?.addEventListener('submit', (event) => {
+  discoveryWindow.querySelector('#discovery-institution-form')?.addEventListener('submit', async (event) => {
     event.preventDefault();
     const input = discoveryWindow.querySelector('#discovery-institution-url');
     if (!input?.reportValidity()) return;
@@ -3679,8 +4011,14 @@ function renderLiteratureDiscoveryWindow() {
     localStorage.setItem('litgraph.institutionLibraryUrl', discoveryInstitutionUrl);
     discoveryInstitutionOpen = false;
     renderLiteratureDiscoveryWindow();
-    toast(panelText('机构图书馆入口已保存', 'Institution library portal saved'));
+    toast(panelText('入口已保存，正在打开机构登录网页', 'Portal saved. Opening institution sign-in'));
+    const target=pendingInstitutionNode?.projectId===currentProjectId?nodes.find(n=>n.id===pendingInstitutionNode.id):null;
+    pendingInstitutionNode=null;
+    await openInstitutionWindow(target,false);
   });
+
+
+
   discoveryWindow.querySelector('#start-discovery')?.addEventListener('click', runLiteratureDiscovery);
   discoveryWindow.querySelector('#discovery-select-all')?.addEventListener('change', (event) => {
     discoverySelected = event.target.checked ? new Set(discoveryResults.map(discoveryResultKey)) : new Set();
@@ -3691,15 +4029,25 @@ function renderLiteratureDiscoveryWindow() {
     else discoverySelected.delete(input.dataset.discoveryResult);
     renderLiteratureDiscoveryWindow();
   }));
-  discoveryWindow.querySelector('#discovery-back')?.addEventListener('click', () => { discoveryStep = 'search'; renderLiteratureDiscoveryWindow(); });
+  discoveryWindow.querySelector('#discovery-back')?.addEventListener('click', () => { discoveryWindow.querySelector('#discovery-window-query')?.focus(); });
   discoveryWindow.querySelector('#discovery-confirm')?.addEventListener('click', confirmDiscoveryImport);
   if (discoveryImporting) {
     const button = discoveryWindow.querySelector('#discovery-confirm');
-    if (button) { button.disabled = false; button.textContent = panelText('停止导入（保留已完成）', 'Stop import (keep completed)'); }
+    if (button) { button.disabled = false; button.textContent = panelText('暂停导入', 'Pause import'); }
+  } else if(activeImportJob()?.items.some(i=>i.stage!=='done')) {
+    const button=discoveryWindow.querySelector('#discovery-confirm');
+    if(button){button.disabled=false;button.textContent=panelText('继续导入并处理','Continue import and processing');}
   }
 }
 
 function openLiteratureDiscoveryWindow() {
+  void loadDiscoveryHistory().then(()=>{
+    if(!activeImportJob()){
+      const recent=discoveryHistory.find(j=>j.projectId===currentProjectId);
+      if(recent)showHistoricalResults(recent);
+    }
+    renderLiteratureDiscoveryWindow();
+  });
   closeResearchWindow();
   activePanel = null;
   renderSecondaryPanel();
@@ -3717,14 +4065,7 @@ function openLiteratureDiscoveryWindow() {
 }
 
 function invalidateDiscoveryResults() {
-  discoveryResults = [];
-  discoverySelected.clear();
-  discoveryStep = 'search';
-  discoveryNotice = '';
-  const confirm = discoveryWindow?.querySelector('#discovery-confirm');
-  if (confirm) confirm.disabled = true;
-  const list = discoveryWindow?.querySelector('.discovery-result-list');
-  if (list) list.innerHTML = '<p class="discovery-empty-copy">' + panelText('条件已变更，请重新检索。', 'Filters changed. Search again.') + '</p>';
+  // Filter edits are drafts. The submitted search and resumable job remain intact.
 }
 
 async function runLiteratureDiscovery() {
@@ -3744,6 +4085,9 @@ async function runLiteratureDiscovery() {
     renderLiteratureDiscoveryWindow();
     return;
   }
+  if(usesInstitution(discoveryFilters.source)&&desktop?.institution){
+    try{const saved=await desktop.institution('saved');if(saved?.saved)discoveryInstitutionUrl=saved.portalUrl||saved.url;}catch{}
+  }
   if (discoveryFilters.source === 'institution' && !discoveryInstitutionUrl) {
     discoveryInstitutionOpen = true;
     renderLiteratureDiscoveryWindow();
@@ -3758,6 +4102,8 @@ async function runLiteratureDiscovery() {
   recordUse('search');
   discoveryController=new AbortController();
   const signal=discoveryController.signal;
+  const job=createImportJob(currentProjectId,discoveryQuery,discoveryFilters);
+  discoveryHistory.unshift(job);activeDiscoveryJobId=job.id;persistDiscoveryHistory();
   const progress=text=>{discoveryProgress=text;renderLiteratureDiscoveryWindow();};
   renderLiteratureDiscoveryWindow();
   try {
@@ -3766,82 +4112,307 @@ async function runLiteratureDiscovery() {
     const response=await callAI(planningMessages(discoveryQuery,filters,language),activeAIConfig(),2000,{json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(180000)])});
     const plan=normalizePlan(safeJsonFromModel(response),discoveryQuery);
     progress(panelText('正在检索学术数据源并核验筛选条件…','Searching scholarly sources and verifying filters…'));
-    const retrieved=await localRequest('search',{queries:plan.queries,filters,exclude:nodes.flatMap(n=>[n.openAlexId,normalizedDoi(n.doi).toLowerCase(),titleKey(n.title)].filter(Boolean))},{signal});
-    const results=[];let analysisFailures=0;
-    for(let offset=0;offset<retrieved.papers.length;offset+=20){
-      signal.throwIfAborted();const batch=retrieved.papers.slice(offset,offset+20);
-      progress(panelText(`正在分析相关性 ${offset+1}–${offset+batch.length} / ${retrieved.papers.length}…`,`Analyzing relevance ${offset+1}–${offset+batch.length} / ${retrieved.papers.length}…`));
-      try{const assessment=await callAI(analysisMessages(discoveryQuery,batch,language),activeAIConfig(),5000,{json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(180000)])});results.push(...applyAssessments(batch,safeJsonFromModel(assessment)));}
-      catch(error){signal.throwIfAborted();analysisFailures+=batch.length;results.push(...batch.map(p=>({...p,relevanceReason:panelText('真实来源记录；AI 相关性分析未完成，请核对摘要。','Source record verified; AI relevance analysis incomplete. Review its abstract.')})));}
-    }
-    if(['combined','relevance'].includes(filters.sort))results.sort((a,b)=>(b.relevanceScore??-1)-(a.relevanceScore??-1));
+    const retrieved=await localRequest('search',{originalQuery:discoveryQuery,queries:plan.queries,subjectTerms:plan.subjectTerms,filters,portalUrl:discoveryInstitutionUrl,projectId:currentProjectId,language,exclude:nodes.flatMap(n=>[n.openAlexId,normalizedDoi(n.doi).toLowerCase(),titleKey(n.title)].filter(Boolean))},{signal});
+    job.found=retrieved.papers.length;job.searchReport={sources:retrieved.sources,sourceReports:retrieved.sourceReports||[],queryReports:retrieved.queryReports||[],queries:plan.queries,subjectTerms:plan.subjectTerms};persistDiscoveryHistory();
+    // Source ranking is final. AI plans keywords once; it does not assess or
+    // rewrite retrieved records. Full-paper analysis belongs to import only.
+    signal.throwIfAborted();
+    const results=[...retrieved.papers];
     results.splice(discoveryCount(filters.resultCount));discoveryResults=results;
-    discoveryNotice=[plan.summary,panelText(`目标 ${filters.resultCount} 篇，实际找到 ${results.length} 篇新文献。来源：${retrieved.sources.join('、')}。`,`Requested ${filters.resultCount}; found ${results.length} new records. Sources: ${retrieved.sources.join(', ')}.`),retrieved.incomplete?panelText('不足目标数量时不会凑数或放宽筛选。','No fabricated filler or relaxed filters.' ):'',analysisFailures?panelText(`${analysisFailures} 篇尚未完成 AI 分析。`,`${analysisFailures} records await AI analysis.`):'',retrieved.warnings.join('; '),filters.source==='institution'?panelText('机构网址仅为访问入口，未连接浏览器登录状态；受限全文需要手动补充。','The institution URL is a portal, not an authenticated browser connection. Add restricted originals manually.'):''].filter(Boolean).join(' ');
+    discoveryNotice=[panelText(`目标 ${filters.resultCount} 篇，实际找到 ${results.length} 篇新文献。`,`Requested ${filters.resultCount}; found ${results.length} new records.`),retrieved.incomplete?panelText('不足目标数量时不会凑数或放宽筛选。','No fabricated filler or relaxed filters.' ):'',retrieved.warnings.join('; ')].filter(Boolean).join(' ');
+    job.noticeI18n={zh:`目标 ${filters.resultCount} 篇，实际找到 ${results.length} 篇新文献。${retrieved.incomplete?'仅显示已核验结果，不补足数量。':''}`,en:`Requested ${filters.resultCount}; found ${results.length} new records.${retrieved.incomplete?' Only verified results are shown; the target is not padded.':''}`};
+    job.searchReport.warnings=retrieved.warnings;
     discoverySelected = new Set();
     discoveryStep = 'results';
+    job.results=results;job.status='ready';job.notice=discoveryNotice;
   } catch (error) {
     discoveryNotice = signal.aborted?panelText('检索已停止，未导入任何论文。','Search stopped. No papers imported.'):panelText(`检索未完成：${localizedError(error, language)}`, `Search incomplete: ${localizedError(error, language)}`);
+    job.status=signal.aborted?'paused':'error';job.error=discoveryNotice;
   } finally {
     discoverySearching = false;
+    persistDiscoveryHistory();
     discoveryController=null;discoveryProgress='';
     renderLiteratureDiscoveryWindow();
   }
 }
 
-async function confirmDiscoveryImport() {
-  if (discoveryImporting) {discoveryController?.abort();return;}
-  const chosen = discoveryResults.filter((metadata, index) => discoverySelected.has(discoveryResultKey(metadata, index)));
-  if (!chosen.length) return;
-  recordUse('import');
-  const importProjectId = currentProjectId;
-  discoveryImporting = true;
-  discoveryController=new AbortController();const signal=discoveryController.signal;
+let historyWrite = Promise.resolve(), historyPending = null;
+function activeImportJob() { return discoveryHistory.find(j => j.id === activeDiscoveryJobId && j.projectId === currentProjectId); }
+function persistDiscoveryHistory() {
+  const serialized = JSON.stringify(discoveryHistory);
+  try { localStorage.setItem(HISTORY_KEY, serialized); } catch { /* Disk is the durable fallback. */ }
+  // Coalesce superseded snapshots while a disk write is in flight. The latest
+  // complete state remains durable without queuing dozens of stale full jobs.
+  historyPending = serialized;
+  historyWrite = historyWrite.catch(() => {}).then(async () => {
+    if (historyPending === null) return;
+    const pending = historyPending; historyPending = null;
+    await localRequest('discovery-history', { jobs: JSON.parse(pending) });
+  }).catch(error => {
+    discoveryNotice = panelText('历史记录尚未保存到磁盘：', 'History has not been saved to disk: ') + localizedError(error, language);
+  });
+}
+function syncPaperProgress(node, item) {
+  for (const job of discoveryHistory.filter(j => j.projectId === currentProjectId)) {
+    for (const other of job.items.filter(i => i.nodeId === node.id && i !== item)) {
+      for (const key of ['downloaded','converted','analyzed','stage','error','rejectedRelationships','relationshipWarnings']) other[key] = item[key];
+    }
+    if (job.items.length && job.items.every(i => i.stage === 'done')) job.status = 'done';
+  }
+}
+function relationshipWarningText(item) {
+  const codes={unknown_peer:panelText('目标论文不在本次原文范围','Target paper outside the supplied sources'),invalid_relationship:panelText('连线字段不完整','Invalid relationship fields'),quotation_too_short:panelText('原文引句过短','Source quotation too short'),source_quote_not_found:panelText('本篇原文未匹配到引句','Quotation not found in this paper'),peer_quote_not_found:panelText('目标原文未匹配到引句','Quotation not found in the target paper'),unmapped_pdf_symbol:panelText('引句含无法识别的 PDF 符号','Quotation contains an unmapped PDF symbol')};
+  const counts=new Map();
+  for(const warning of item.relationshipWarnings||[]){const label=codes[warning.code]||panelText('连线未通过校验','Relationship validation failed');counts.set(label,(counts.get(label)||0)+1);}
+  return panelText(`论文节点、总结和分类已保存；${item.rejectedRelationships} 条候选连线未通过校验，未加入图谱。`,`Paper node, summary and classification saved; ${item.rejectedRelationships} candidate relationships failed validation and were not added.`)+(counts.size?' '+[...counts].map(([label,count])=>`${label}: ${count}`).join('；'):'');
+}
+function saveImportProgress(job, node, item) {
+  if (currentProjectId !== job.projectId || !nodes.some(n => n.id === node.id)) return;
+  item.title=node.title;
+  node.analysisStatus = item.analyzed ? 'done' : item.stage === 'analyzing' ? 'running' : 'pending';
+  node.processingError = item.error || '';
+  item.rejectedRelationships = node.analysisWarnings?.length || 0;
+  item.relationshipWarnings = node.analysisWarnings || [];
+  syncPaperProgress(node, item);
+  saveCurrentProject();
+  persistDiscoveryHistory();
+  updateAddPapersButton();
+  renderLiteratureDiscoveryWindow();
+  if (selectedNode?.id === node.id) renderInspector(node);
+}
+async function refreshLocalMetadata(node, document, signal) {
+  if(!shouldRefreshLocalMetadata(node) || !document?.markdown)return;
+  const firstPages=document.markdown.split(/## PDF Page 3\b/)[0].slice(0,14000);
+  const doi=normalizedDoi(firstPages.match(/10\.\d{4,9}\/[\w.()/:;-]+/i)?.[0]||'');
+  node.doi=doi || normalizedDoi(node.doi);
   try {
-  if (!project.theories.some((theory) => theory.id === 'unclassified')) {
-    project.theories.push({ id: 'unclassified', label: '待分类', labelEn: 'Unclassified', color: '#7c6ca8' });
+    const {metadata}=await localRequest('metadata',{doi:node.doi,title:node.title},{signal});
+    if(metadata){applyScholarlyMetadata(node,metadata);node.metadataWarning='';}
+    else node.metadataWarning=panelText('暂未找到精确匹配的学术记录，被引量保持未知。','No exact scholarly record found; citation count remains unknown.');
+  } catch(error){signal.throwIfAborted();node.metadataWarning=localizedError(error,language);}
+  node.metadataChecked=true;rebuildMetadataCitationLinks();
+}
+async function analyzeOriginal(node, signal) {
+  await refreshLocalMetadata(node,await getFulltext(node),signal);
+  if (!aiAvailable()) throw Object.assign(Error(panelText('原文已保存；请连接模型后继续分析。','Original saved. Connect a model to continue analysis.')),{permanent:true});
+  const document = await getFulltext(node);
+  if (!document?.markdown?.trim()) throw Error(panelText('尚无可分析的 MD 原文。','No Markdown original is available for analysis.'));
+  const query = node.title + ' methods results findings limitations conclusion';
+  const text = selectEvidence([{node,document}], query, 24000).map(e => e.text).join('\n\n');
+  const peers = [];
+  // Bound model context; only compare indexed originals, never infer edges from titles.
+  const terms = new Set((node.title.toLowerCase().match(/[a-z]{3,}|[\u3400-\u9fff]/g) || []));
+  const candidates = nodes.filter(n => n.id !== node.id && (n.fulltextKey || n.fulltextStorageKey))
+    .sort((a,b) => [...terms].filter(t => b.title.toLowerCase().includes(t)).length - [...terms].filter(t => a.title.toLowerCase().includes(t)).length);
+  for (const peer of candidates) {
+    signal.throwIfAborted();
+    const original = await getFulltext(peer);
+    if (original?.markdown) peers.push({ id: peer.id, title: peer.title, text: selectEvidence([{node:peer,document:original}], query, 3200).map(e => e.text).join('\n\n') });
+    if (peers.length >= 6) break;
+  }
+  const answerLanguage = language;
+  const raw = await callAI(paperAnalysisMessages(node,text,peers,project.theories,answerLanguage), activeAIConfig(), 5000,
+    {json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(180000)])});
+  signal.throwIfAborted();
+  const result = validatePaperAnalysis(safeJsonFromModel(raw),text,peers);
+  node.summary = result.summary.trim();
+  node.summaryLanguage = answerLanguage;
+  node.aiSummaryEn = answerLanguage === 'en' ? node.summary : '';
+  node.aiSummaryZh = answerLanguage === 'zh' ? node.summary : '';
+  node.claimLabel = typeof result.label === 'string' ? result.label.slice(0,120) : node.claimLabel;
+  if (answerLanguage === 'en') node.claimLabelEn = node.claimLabel;
+  node.keywords = Array.isArray(result.keywords) ? result.keywords.filter(k => typeof k === 'string').slice(0,12) : node.keywords;
+  let theory = project.theories.find(t => t.id === result.theory?.id && t.id !== 'unclassified');
+  if (!theory && typeof result.theory?.label === 'string' && result.theory.label.trim()) {
+    theory = project.theories.find(t => t.id !== 'unclassified' && t.label === result.theory.label.trim());
+    if (!theory) {
+      theory = {id:'theory-'+crypto.randomUUID(),label:result.theory.label.trim().slice(0,80),labelEn:String(result.theory.labelEn||result.theory.label).slice(0,80),color:['#6984b8','#b582b8','#70a99a','#b79e69','#8d80bf'][project.theories.length%5]};
+      project.theories.push(theory);
+    }
+  }
+  if (theory) { node.primaryTheory = theory.id; enabledTheories.add(theory.id); }
+  project.semanticLinks = project.semanticLinks.filter(e => !(endpointId(e.source) === node.id && e.sourceType === 'fulltext_analysis'));
+  for (const edge of result.relationships) project.semanticLinks.push({
+    id:'analysis-'+node.id+'-'+edge.targetId,source:node.id,target:edge.targetId,
+    relation:edge.relation,strength:Math.max(1,Math.round(edge.strength*5)),rationale:edge.rationale,
+    sourceQuote:edge.sourceQuote,targetQuote:edge.targetQuote,sourceType:'fulltext_analysis'
+  });
+  node.analysisCoverage = {source:'indexed_original_excerpts',comparedPaperIds:peers.map(p => p.id),relationshipValidation:result.relationshipValidation};
+  node.analysisWarnings = result.relationshipValidation?.warnings || [];
+  rebuildMetadataCitationLinks();
+}
+function importJobReport(job) {
+  const counts=jobCounts(job),failed=job.items.filter(i=>i.stage==='error');
+  return panelText(`处理结束：完整完成 ${counts.completed} 篇，失败 ${failed.length} 篇；已保存原文 ${counts.downloaded} 篇、MD ${counts.converted} 篇。失败项目保留已完成内容，可在历史详情中查看原因并重试。`,`Finished: ${counts.completed} complete, ${failed.length} failed; ${counts.downloaded} originals and ${counts.converted} Markdown files saved. Completed stages are retained; see history details for reasons and retry.`);
+}
+const activePaperTasks = new Map();
+async function runImportJob(job, onlyNodeId = null) {
+  if (discoveryImporting || discoverySearching || job.projectId !== currentProjectId) return;
+  activeDiscoveryJobId = job.id;
+  discoveryImporting = true;
+  discoveryController = new AbortController();
+  const jobSignal = discoveryController.signal;
+  job.status = 'running';
+  job.error='';job.notice='';
+  recordUse('import');
+  persistDiscoveryHistory();
+  try {
+    await processImportBatch(job.items.filter(item => !onlyNodeId || item.nodeId === onlyNodeId), async (item, stages) => {
+      if (!job.items.includes(item)) return;
+      jobSignal.throwIfAborted();
+      if (job.projectId !== currentProjectId) throw Error('Project changed.');
+      const node = nodes.find(n => n.id === item.nodeId);
+      if (!node) { item.stage='error';item.error=panelText('论文节点已删除。','Paper node was deleted.');persistDiscoveryHistory();return; }
+      let acquired;
+      const paperController = new AbortController();
+      activePaperTasks.set(node.id, paperController);
+      const signal=AbortSignal.any([jobSignal,paperController.signal]);
+      try { await processImportItem(item, {
+        save: () => {
+          if (['downloading','converting','analyzing'].includes(item.stage)) job.phase = item.stage;
+          const count = jobCounts(job);
+          discoveryProgress = panelText(`原文 ${count.downloaded}/${count.total} · MD ${count.converted}/${count.downloaded} · 分析 ${count.analyzed}/${count.converted}`,
+            `Originals ${count.downloaded}/${count.total} · MD ${count.converted}/${count.downloaded} · Analysis ${count.analyzed}/${count.converted}`);
+          saveImportProgress(job,node,item);
+        },
+        reconcile: async () => {
+          const saved = await localRequest('document-state',{key:node.fulltextKey,projectId:job.projectId,nodeId:node.id},{signal});
+          signal.throwIfAborted();
+          if (saved) {
+            node.fulltextKey=saved.key;
+            if (saved.metadata) applyScholarlyMetadata(node,saved.metadata);
+            if (saved.originalRelativePath) { node.originalRelativePath=saved.originalRelativePath;node.hasPdf=true; }
+            node.markdownRelativePath=saved.markdownRelativePath;
+            item.downloaded=Boolean(saved.originalRelativePath || saved.markdown);
+            item.converted=Boolean(saved.markdown);
+            if (saved.markdown) { node.fulltextStatus='indexed';node.fulltextPersistence='disk'; }
+          } else {
+            const cached = await getFulltext(node);
+            item.downloaded=Boolean(cached?.markdown || await originalBlob(node));
+            item.converted=false;
+          }
+          item.analyzed = item.converted && paperIsProcessed(node);
+        },
+        download: async () => {
+          let localFile=pendingOriginalFiles.get(node.id);
+          if(!localFile && node.localFileUrl?.startsWith('blob:')) {
+            try {localFile=new File([await fetch(node.localFileUrl).then(r=>r.blob())],node.fileName||'original.pdf',{type:'application/pdf'});}catch{}
+          }
+          if(localFile){await saveOriginalFile(job.projectId,node,localFile);pendingOriginalFiles.delete(node.id);return;}
+          if (!node.discoveryRecordId) throw Error(panelText('请先为这篇论文补充原文文件。','Add this paper’s original file first.'));
+          // The common backend owns OA and institution routing, PDF validation,
+          // persistence and cancellation. Never start a second native download
+          // after a transport/storage error whose first outcome is uncertain.
+          acquired=await localRequest('acquire',{recordId:node.discoveryRecordId,projectId:job.projectId,nodeId:node.id,source:job.filters?.source||'open',portalUrl:job.filters?.institutionUrl||discoveryInstitutionUrl,language},{signal});
+          signal.throwIfAborted();
+          item.acquisition = { status: acquired.status, source: acquired.source, elapsedMs: acquired.elapsedMs, attempts: acquired.attempts };
+          applyScholarlyMetadata(node,acquired.metadata);node.fulltextKey=acquired.key;
+          rebuildMetadataCitationLinks();
+          if(acquired.data){node.originalRelativePath=acquired.originalRelativePath;node.hasPdf=true;node.fulltextStatus='downloaded';return;}
+          node.fulltextStatus=acquired.status;
+          throw Object.assign(Error(acquired.error||'No accessible original.'),{permanent:acquired.retryable===false});
+        },
+        convert: async () => {
+          let originalDocument = await getFulltext(node);
+          if (!originalDocument?.markdown) {
+            const blob = acquired?.data ? new Blob([Uint8Array.from(atob(acquired.data),c=>c.charCodeAt(0))],{type:'application/pdf'}) : await originalBlob(node);
+            if (!blob) throw Error(panelText('本地原文文件不可用，请补充原文。','Local original unavailable. Add the original file.'));
+            const file = blob instanceof File ? blob : new File([blob],node.fileName||node.title.slice(0,100)+'.pdf',{type:'application/pdf'});
+            let lastPageUpdate = 0;
+            originalDocument = await extractFile(file,{signal,onProgress:(page,total) => {
+              item.pages={done:page,total};
+              if (Date.now()-lastPageUpdate>400 || page===total) { lastPageUpdate=Date.now();renderLiteratureDiscoveryWindow(); }
+            }});
+            originalDocument.originalAlreadySaved=Boolean(node.originalRelativePath);
+          }
+          signal.throwIfAborted();
+          await saveFulltext(job.projectId,node,originalDocument);
+          if (node.fulltextPersistence !== 'disk') throw Error(panelText('MD 未保存到磁盘，请检查可用空间后继续。','Markdown was not saved to disk. Check storage and continue.'));
+        },
+        analyze: () => analyzeOriginal(node,signal)
+      },signal,{stages});
+      } catch(error) { if(nodes.some(n=>n.id===node.id))throw error; }
+      finally {activePaperTasks.delete(node.id);}
+      if (job.projectId !== currentProjectId) return;
+      configureSimulation(false);renderOverviewState();render();
+    }, { signal: jobSignal, downloadConcurrency: usesInstitution(job.filters?.source) ? 1 : 2 });
+    job.status=job.items.every(i=>i.stage==='done')?'done':'attention';
+    job.notice=importJobReport(job);
+    discoveryNotice=job.notice;
+    toast(job.notice);
+  } catch (error) {
+    job.status=jobSignal.aborted?'paused':'attention';
+    if (!jobSignal.aborted) job.error=localizedError(error,language);
+  } finally {
+    persistDiscoveryHistory();
+    await historyWrite;
+    if (job.projectId === currentProjectId) {
+      if(!jobSignal.aborted) rebuildProcessedGraph();
+      else configureSimulation(false);
+      saveCurrentProject();
+      await localRequest('project',{projectId:job.projectId,project:cleanProjectForExport()}).catch(error => {
+        discoveryNotice=panelText('项目磁盘备份失败：','Project disk backup failed: ')+error.message;
+      });
+      renderOverviewState();render();
+      if (selectedNode) renderInspector(selectedNode);
+    }
+    discoveryImporting=false;discoveryController=null;discoveryProgress='';
+    importProgress={processing:false,done:0,total:0,ready:false};updateAddPapersButton();
+    if (selectedNode) renderInspector(selectedNode);
+    renderLiteratureDiscoveryWindow();
+  }
+}
+let importPauseRequested=false;
+function pauseActiveImport() {
+  importPauseRequested=true;
+
+  discoveryController?.abort();
+}
+async function confirmDiscoveryImport() {
+  if (discoveryImporting) { pauseActiveImport();return; }
+  let job=activeImportJob();
+  if (job?.items.some(i=>i.stage!=='done')) return runImportJob(job);
+  const chosen=discoveryResults.filter((p,i)=>discoverySelected.has(discoveryResultKey(p,i)));
+  if (!chosen.length) return;
+  if (!job) {
+    job=createImportJob(currentProjectId,discoveryQuery,discoveryFilters,discoveryResults);
+    job.status='ready';job.found=discoveryResults.length;
+    discoveryHistory.unshift(job);activeDiscoveryJobId=job.id;
+  }
+  if(usesInstitution(job.filters.source)&&!job.filters.institutionUrl)job.filters.institutionUrl=discoveryInstitutionUrl;
+  if (!project.theories.some(t=>t.id==='unclassified')) {
+    project.theories.push({id:'unclassified',label:'待分类',labelEn:'Unclassified',color:'#7c6ca8'});
     enabledTheories.add('unclassified');
   }
-  const existing=new Set(nodes.map(n=>normalizedDoi(n.doi).toLowerCase()||titleKey(n.title)));
-  const additions = chosen.filter(p=>!existing.has(normalizedDoi(p.doi).toLowerCase()||titleKey(p.title))).map((p,i)=>({...nodeFromScholarlyMetadata(p,i),discoveryRecordId:p.recordId}));
-  const button = discoveryWindow?.querySelector('#discovery-confirm');
-  if(button)button.disabled=false;
-  let indexed = 0;
-  const completed=[];
-  for (const [index,node] of additions.entries()) {
-    if(signal.aborted)break;
-    if (currentProjectId !== importProjectId) throw new Error(panelText('项目已切换，已停止导入。请在原项目中重试。', 'Import stopped because the project changed. Retry in the original project.'));
-    node.fulltextStatus = 'missing';
-    discoveryProgress=panelText(`获取与索引原文 ${index+1} / ${additions.length}…`,`Retrieving and indexing ${index+1} / ${additions.length}…`);renderLiteratureDiscoveryWindow();
-    try {
-      const acquired=await localRequest('acquire',{recordId:node.discoveryRecordId,projectId:importProjectId,nodeId:node.id},{signal});
-      applyScholarlyMetadata(node,acquired.metadata);node.fulltextKey=acquired.key;
-      if(!acquired.data){node.fulltextStatus=acquired.status;throw new Error(acquired.error);}
-      node.originalRelativePath=acquired.originalRelativePath;node.hasPdf=true;node.fulltextStatus='downloaded';
-      const file = new File([Uint8Array.from(atob(acquired.data),c=>c.charCodeAt(0))], `${node.title.slice(0, 100)}.pdf`, { type: 'application/pdf' });
-      const document = await extractFile(file);
-      document.originalAlreadySaved=true;
-      signal.throwIfAborted();
-      if (currentProjectId !== importProjectId) throw new Error('项目已切换');
-      await saveFulltext(importProjectId, node, document); indexed++;
-    } catch (error) { if(signal.aborted)break;node.fulltextError = panelText(`原文未索引：${localizedError(error, language)}。可将原文拖入研究空间补充。`, `Full text not indexed: ${localizedError(error, language)}. Add the original in Research space.`);if(node.originalRelativePath)node.fulltextStatus='needs_conversion'; }
-    if(currentProjectId!==importProjectId)break;
-    completed.push(node);nodes.push(node);project.nodes=nodes;project.meta.mock=false;projectIsBlank=false;rebuildMetadataCitationLinks();saveCurrentProject();
-    await localRequest('project',{projectId:importProjectId,project:cleanProjectForExport()}).catch(()=>{node.persistenceWarning='Project snapshot was not saved to disk.';});
+  for (const metadata of chosen) {
+    let node=nodes.find(n => metadata.recordId && n.discoveryRecordId===metadata.recordId || normalizedDoi(metadata.doi) && normalizedDoi(n.doi)===normalizedDoi(metadata.doi) || titleKey(n.title)===titleKey(metadata.title));
+    if (!node) { node={...nodeFromScholarlyMetadata(metadata,nodes.length),id:'paper-'+crypto.randomUUID(),discoveryRecordId:metadata.recordId};nodes.push(node); }
+    if (!job.items.some(i=>i.nodeId===node.id)) job.items.push({nodeId:node.id,title:node.title,downloaded:false,converted:false,analyzed:false,stage:'pending'});
   }
-  if (currentProjectId !== importProjectId) throw new Error(panelText('项目已切换，未向其他项目写入论文。请在原项目中重试。', 'The project changed. No papers were added to another project. Retry in the original project.'));
-  project.nodes = nodes;
-  project.meta.mock = false;
-  projectIsBlank = false;
-  rebuildMetadataCitationLinks();
-  configureSimulation(false);
-  renderOverviewState();
-  saveCurrentProject();
-  if (view !== 'table') fitView(320);
-  discoveryResults=discoveryResults.filter(p=>!completed.some(n=>n.discoveryRecordId===p.recordId));discoverySelected.clear();
-  discoveryNotice=panelText(`${signal.aborted?'已停止。':''}已导入 ${completed.length} 篇，${indexed} 篇原文已索引，其余需补充原文或转换。`,`${signal.aborted?'Stopped. ':''}Imported ${completed.length}; ${indexed} full texts indexed. Others need an original or conversion.`);
-  toast(discoveryNotice);
-  } catch (error) { showResearchNotice(localizedError(error, language)); }
-  finally { discoveryImporting = false;discoveryController=null;discoveryProgress=''; if (discoveryWindow?.isConnected) renderLiteratureDiscoveryWindow(); }
+  project.nodes=nodes;project.meta.mock=false;projectIsBlank=false;
+  rebuildMetadataCitationLinks();saveCurrentProject();persistDiscoveryHistory();
+  // Materialize selected, verified records before the first network request.
+  // A stopped simulation and the 3D graph both need an explicit refresh.
+  configureSimulation();renderOverviewState();
+  if(renderMode==='3d'&&view!=='table')void renderGraph3D(true);
+  else render();
+  await new Promise(resolve=>requestAnimationFrame(()=>resolve()));
+  await runImportJob(job);
+}
+async function processSinglePaper(node) {
+  if (discoveryImporting || discoverySearching) return toast(panelText('请先暂停当前任务。','Pause the current task first.'));
+  if(node.fileName && node.id.startsWith('local-paper-'))node.importedLocally=true;
+  node.metadataChecked=false;
+  let job=discoveryHistory.find(j=>j.projectId===currentProjectId && j.items.some(i=>i.nodeId===node.id));
+  if (!job) {
+    job=createImportJob(currentProjectId,node.title,{},[]);
+    job.status='ready';job.found=1;
+    job.items=[{nodeId:node.id,title:node.title,stage:'pending'}];discoveryHistory.unshift(job);
+  }
+  const item=job.items.find(i=>i.nodeId===node.id);
+  if (item.stage==='done') { node.analysisStatus='pending';item.analyzed=false; }
+  item.stage='pending';item.error='';
+  await runImportJob(job,node.id);
 }
 
 async function enrichImportedNode(node, sourceText) {
@@ -3871,7 +4442,7 @@ async function enrichImportedNode(node, sourceText) {
 
 function acceptedPaperFile(file) {
   const extension = file.name.split('.').pop()?.toLowerCase() || '';
-  return ['pdf', 'doc', 'docx', 'txt', 'md', 'rtf', 'html', 'htm', 'epub', 'odt', 'tex', 'csv', 'json'].includes(extension);
+  return ['pdf', 'txt', 'md', 'tex', 'csv', 'json'].includes(extension);
 }
 
 function renderStagedPaperFiles() {
@@ -3900,9 +4471,11 @@ function stagePaperFiles(fileList) {
 }
 
 function openPaperImportDialog(files = []) {
-  if (importProgress.processing) return;
   stagedImportFiles = [];
+  paperImportHistoryOpen=false;
   document.querySelector('#paper-import-modal').hidden = false;
+  renderPaperImportHistory();
+  void loadDiscoveryHistory().then(renderPaperImportHistory);
   if (files.length) stagePaperFiles(files);
   else renderStagedPaperFiles();
   window.setTimeout(() => document.querySelector('#paper-dropzone').focus(), 0);
@@ -3912,12 +4485,17 @@ function updateAddPapersButton() {
   const button = document.querySelector('#add-papers-button');
   const label = button.querySelector('.add-papers-label');
   const count = button.querySelector('.add-papers-count');
-  button.classList.toggle('processing', importProgress.processing);
+  const processing=importProgress.processing||discoveryImporting;
+  const job=activeImportJob(),stages=discoveryImporting&&job?.items.length?jobCounts(job):null;
+  const phase=importProgress.processing?'downloading':job?.phase || 'downloading';
+  const total=importProgress.processing?importProgress.total:stages?(phase==='analyzing'?stages.converted:phase==='converting'?stages.downloaded:stages.total):0;
+  const done=importProgress.processing?importProgress.done:stages?(phase==='analyzing'?stages.analyzed:phase==='converting'?stages.converted:stages.downloaded):0;
+  button.classList.toggle('processing', processing);
   button.classList.toggle('ready', importProgress.ready);
-  button.style.setProperty('--paper-progress', `${importProgress.total ? Math.round(importProgress.done / importProgress.total * 100) : 0}%`);
-  if (importProgress.processing) {
-    label.textContent = panelText('AI 正在处理', 'AI processing');
-    count.textContent = `${importProgress.done}/${importProgress.total}`;
+  button.style.setProperty('--paper-progress', `${processing&&total ? Math.round(done / total * 100) : 0}%`);
+  if (processing) {
+    label.textContent = phase==='analyzing'?panelText('论文分析中','Analyzing papers'):phase==='converting'?panelText('本地转换中','Converting locally'):panelText('论文导入中','Importing papers');
+    count.textContent = `${done}/${total}`;
   } else if (importProgress.ready) {
     label.textContent = panelText('重新绘制画布', 'Redraw canvas');
     count.textContent = `${importProgress.total}/${importProgress.total}`;
@@ -3925,61 +4503,47 @@ function updateAddPapersButton() {
     label.textContent = panelText('添加论文', 'Add papers');
     count.textContent = '';
   }
+  renderPaperImportHistory();
 }
 
 async function buildImportedNode(file, index) {
-  const extension = file.name.split('.').pop()?.toLowerCase() || '';
   const title = file.name.replace(/\.[^.]+$/, '').replaceAll('_', ' ');
-  let document, extractionError;
-  try { document = await extractFile(file); } catch (error) { extractionError = error.message; }
-  const text = document?.markdown || '';
-  const id = `local-paper-${Date.now()}-${index}`;
-  const node = {
-    id, fileName: file.name, title, authors: [], year: new Date().getFullYear(), month: new Date().getMonth() + 1,
-    language: /[\u3400-\u9fff]/.test(title) ? 'zh' : 'en', primaryTheory: 'unclassified', secondaryTheories: [],
-    citations: 0, impact: 0, theoryStrength: 0.55, claimLabel: title, claimLabelEn: title,
-    keywords: [], journal: '', field: 'Unclassified', articleType: 'Research article',
-    hasPdf: true, doi: '', url: '', localFileUrl: URL.createObjectURL(file), pdfUrl: '',
-    abstract: panelText('正在从学术数据源获取摘要。', 'Retrieving the abstract from scholarly metadata.'),
-    summary: aiAvailable() ? panelText('正在由 AI 生成总结。', 'AI is preparing a summary.') : panelText('接入 AI 后可生成总结。', 'Connect AI to generate summaries.'),
-    detailedResults: { question: '', method: '', conclusion: '', metrics: [] },
-    isMock: false, read: false, viewPositions: {}
-  };
-  if (document) await saveFulltext(currentProjectId, node, document);
-  else { node.fulltextStatus = 'extraction_failed'; node.fulltextError = extractionError; }
-  const ordinal = nodes.length + index;
-  const angle = ordinal * 2.3999632297;
-  node.x = Math.cos(angle) * (45 + ordinal * 4);
-  node.y = Math.sin(angle) * (45 + ordinal * 4);
-  node.fx = node.x;
-  node.fy = node.y;
-  node.viewPositions.semantic = { x: node.x, y: node.y, fx: node.x, fy: node.y };
-  const doi = normalizedDoi((`${file.name}\n${text}`).match(/10\.\d{4,9}\/[\w.()/:;-]+/i)?.[0] || '');
-  const metadata = await lookupScholarlyMetadata({ doi, title });
-  applyScholarlyMetadata(node, metadata);
-  if (!metadata?.abstract) node.abstract = panelText('学术数据源暂未收录摘要。', 'No abstract is currently available from the scholarly source.');
-  if (aiAvailable()) await enrichImportedNode(node, text || title);
-  else await new Promise((resolve) => window.setTimeout(resolve, 180));
+  const existing=nodes.find(n=>n.fileName===file.name || titleKey(n.title)===titleKey(title));
+  const node=existing || {...nodeFromScholarlyMetadata({title,authors:[],citations:null},index),id:'local-paper-'+crypto.randomUUID()};
+  Object.assign(node,{fileName:file.name,importedLocally:true,metadataChecked:false,analysisStatus:'pending',processingError:''});
+  pendingOriginalFiles.set(node.id,file);
+  if(!existing)nodes.push(node);
+  // Save every source first, even when later conversion/analysis is unavailable.
+  try {await saveOriginalFile(currentProjectId,node,file);pendingOriginalFiles.delete(node.id);}
+  catch(error){node.fulltextError=error.message;node.fulltextStatus='storage_failed';}
   return node;
 }
 
 async function processStagedPapers() {
   if (!stagedImportFiles.length || importProgress.processing) return;
+  if(discoveryImporting || discoverySearching)return toast(panelText('请先暂停当前处理任务。','Pause the current processing task first.'));
   recordUse('import');
   const files = [...stagedImportFiles];
+  importPauseRequested=false;
   closeModal('paper-import');
-  pendingImportedNodes = [];
+  if(!project.theories.some(t=>t.id==='unclassified'))project.theories.push({id:'unclassified',label:'待分类',labelEn:'Unclassified',color:'#7c6ca8'});
+  enabledTheories.add('unclassified');
+  const job=createImportJob(currentProjectId,panelText(`本地文件导入（${files.length} 篇）`,`Local file import (${files.length})`),{resultCount:files.length});
+  job.kind='local';job.status='running';job.found=files.length;discoveryHistory.unshift(job);activeDiscoveryJobId=job.id;
+  discoveryImporting=true;
   importProgress = { processing: true, done: 0, total: files.length, ready: false };
   updateAddPapersButton();
-  for (const [index, file] of files.entries()) {
-    pendingImportedNodes.push(await buildImportedNode(file, index));
-    importProgress.done = index + 1;
-    updateAddPapersButton();
-  }
-  importProgress.processing = false;
-  importProgress.ready = true;
-  updateAddPapersButton();
-  toast(panelText('论文处理完成，点击“重新绘制画布”加入图谱', 'Processing complete. Click “Redraw canvas” to add the papers.'));
+  try {
+    for (const [index, file] of files.entries()) {
+      const node=await buildImportedNode(file,index);
+      if(!job.items.some(i=>i.nodeId===node.id))job.items.push({nodeId:node.id,title:node.title,stage:'pending',downloaded:Boolean(node.originalRelativePath||node.markdownRelativePath),converted:Boolean(node.markdownRelativePath),analyzed:false});
+      project.nodes=nodes;project.meta.mock=false;projectIsBlank=false;
+      importProgress.done=index+1;updateAddPapersButton();saveCurrentProject();persistDiscoveryHistory();
+    }
+  } finally {discoveryImporting=false;importProgress.processing=false;importProgress.ready=false;stagedImportFiles=[];updateAddPapersButton();}
+  configureSimulation(false);renderOverviewState();render();
+  if(importPauseRequested){job.status='paused';persistDiscoveryHistory();await historyWrite;await localRequest('project',{projectId:job.projectId,project:cleanProjectForExport()});updateAddPapersButton();renderLiteratureDiscoveryWindow();return;}
+  await runImportJob(job);
 }
 
 function commitImportedPapers() {
@@ -4280,6 +4844,14 @@ function zoomFromCenter(factor) {
 
 document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
 function handleWorkspaceAction(action) {
+  if (action === 'reset-settings') { void resetUserSettings(); return; }
+  if (action === 'data-folder') {
+    const keys=nodes.map(node=>node.fulltextKey).filter(Boolean);
+    void localRequest('project',{projectId:currentProjectId,project:cleanProjectForExport()}).then(()=>localRequest('data-folder',{keys})).then(result => {
+      if (!result.opened) showResearchNotice(panelText('数据文件夹：', 'Data folder: ') + result.path);
+    }).catch(error => toast(localizedError(error, language)));
+    return;
+  }
   if (action === 'import') document.querySelector('#file-input').click();
   else if (action === 'export') exportProject();
   else if (action === 'api') openModal('api');
@@ -4342,6 +4914,7 @@ document.querySelector('#canvas-fit-button').addEventListener('click', () => fit
 document.querySelector('#zoom-in-button').addEventListener('click', () => zoomFromCenter(1.2));
 document.querySelector('#zoom-out-button').addEventListener('click', () => zoomFromCenter(1 / 1.2));
 document.querySelector('#lock-button').addEventListener('click', toggleGraphLock);
+document.querySelector('#delete-papers-button').addEventListener('click',()=>void deletePaperNodes([...new Set([...selectedNodes,...(selectedNode?[selectedNode.id]:[])])]));
 document.querySelector('#edit-mode-button').addEventListener('click', toggleEditMode);
 document.querySelector('#multi-select-button').addEventListener('click', () => setInteractionMode('multi'));
 document.querySelector('#box-select-button').addEventListener('click', () => setInteractionMode('box'));
@@ -4427,8 +5000,50 @@ document.querySelector('#toggle-api-key').addEventListener('click', (event) => {
   event.currentTarget.setAttribute('aria-pressed', String(!showing));
   input.focus();
 });
+let changingSettings = false;
+function settingsHaveActiveWork() {
+  return changingSettings || discoverySearching || discoveryImporting || receivingInstitution || importProgress.processing || researchAttachmentLoads.size || activePaperTasks.size || [...researchRequests.values()].some(run=>run.status==='pending') || document.querySelector('#test-api-button').disabled;
+}
+async function resetUserSettings() {
+  if(settingsHaveActiveWork())return toast(panelText('请先暂停或等待当前任务完成，再还原设置。','Pause or finish active tasks before resetting settings.'));
+  const confirmed=await new Promise(resolve=>{
+    const overlay=document.createElement('div');overlay.className='modal-backdrop delete-confirm-backdrop';
+    const previous=document.activeElement;
+    overlay.innerHTML=`<section class="settings-dialog delete-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="reset-settings-title"><h2 id="reset-settings-title">${panelText('还原所有设置？','Reset all settings?')}</h2><p>${panelText('清除 API 地址、密钥和模型配置，解除外部 Agent 配对，清除机构登录状态及入口网址，并还原语言、显示和界面偏好。','Remove API settings and key, disconnect external agent pairing, clear institution sign-in and portal URL, and restore language, display and interface preferences.')}</p><p>${panelText('保留全部项目、PDF、MD、分析、向量、节点图 JSON、对话及导入历史。不会删除研究数据。','All projects, PDFs, Markdown, analyses, vectors, graph JSON, conversations and import history are retained. No research data is deleted.')}</p><footer><button type="button" data-reset-cancel>${panelText('取消','Cancel')}</button><button type="button" data-reset-confirm>${panelText('确认还原','Confirm reset')}</button></footer></section>`;
+    const finish=value=>{overlay.remove();previous?.isConnected&&previous.focus();resolve(value);};
+    overlay.querySelector('[data-reset-cancel]').onclick=()=>finish(false);
+    overlay.querySelector('[data-reset-confirm]').onclick=()=>finish(true);
+    overlay.onkeydown=event=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();finish(false);}if(event.key==='Tab'){event.preventDefault();const buttons=[...overlay.querySelectorAll('button')];buttons[(buttons.indexOf(document.activeElement)+1)%2].focus();}};
+    document.body.append(overlay);overlay.querySelector('[data-reset-cancel]').focus();
+  });
+  if(!confirmed)return;
+  if(settingsHaveActiveWork())return toast(panelText('有任务正在处理，请稍后再还原设置。','A task is active. Reset settings after it finishes.'));
+  changingSettings=true;
+  const blocker=document.createElement('div');blocker.className='modal-backdrop delete-confirm-backdrop';blocker.setAttribute('role','status');blocker.textContent=panelText('正在还原设置…','Resetting settings…');document.body.append(blocker);
+  try {
+    saveCurrentProject();await historyWrite;
+    await localRequest('disconnect',{});
+    const snapshot=Object.fromEntries(Object.keys(localStorage).map(key=>[key,localStorage.getItem(key)]));
+    if(desktop)await desktop.resetSettings(snapshot);
+    for(const key of preferenceKeys)localStorage.removeItem(key);
+    aiConfig=null;
+    if(desktop&&!desktop.saveState(Object.fromEntries(Object.keys(localStorage).map(key=>[key,localStorage.getItem(key)]))))throw Error(panelText('设置未能保存，请重试。','Settings could not be saved. Retry.'));
+    location.reload();
+  }catch(error){blocker.remove();changingSettings=false;toast(localizedError(error,language));}
+}
+document.querySelector('#delete-api-config').addEventListener('click',async()=>{
+  if(settingsHaveActiveWork())return toast(panelText('请先暂停或等待当前任务完成，再删除配置。','Pause or finish active tasks before deleting the configuration.'));
+  changingSettings=true;
+  try {
+    if(desktop)await desktop.deleteConfig();
+    localStorage.removeItem('litgraph.aiConfig');aiConfig=null;
+    openModal('api');updateModelBadge();
+    toast(panelText('API 配置已删除，研究数据已保留。','API configuration deleted. Research data is retained.'));
+  }catch(error){toast(localizedError(error,language));}finally{changingSettings=false;}
+});
 document.querySelector('#api-form').addEventListener('submit', async (event) => {
   event.preventDefault();
+  if(changingSettings || document.querySelector('#test-api-button').disabled)return;
   const errorHost = document.querySelector('#api-error');
   const submit = document.querySelector('#test-api-button');
   const modelChoice = document.querySelector('#api-model').value;
@@ -4476,15 +5091,39 @@ document.querySelector('#copy-agent-instructions').addEventListener('click', asy
   const button = event.currentTarget;
   button.disabled = true;
   try {
+    if (externalState().managed && externalState().configured) throw Error(panelText('请先断开按需调用，再启用手动 MCP 接入。', 'Disconnect on-demand execution before enabling manual MCP.'));
     const instructions = await externalInstructions(agentPageContext(), language);
-    await navigator.clipboard.writeText(instructions);
+    await copyTextToClipboard(instructions, language);
     updateModelBadge();
     toast(panelText('接入说明已复制。请发给外部 Agent，保持此页面打开。', 'Instructions copied. Send them to your external agent and keep this page open.'));
   } catch (error) { showResearchNotice(panelText(`无法复制接入说明：${error.message}`, `Cannot copy connection instructions: ${error.message}`)); }
   finally { button.disabled = false; }
 });
+for (const [id, action] of [['connect-agent-runtime', 'connect'], ['choose-agent-runtime', 'choose']]) {
+  document.querySelector(`#${id}`).addEventListener('click', async () => {
+    const errorHost = document.querySelector('#api-error');
+    if (!desktop?.agentRuntime) { errorHost.textContent = panelText('按需调用需要使用 LitGraph 桌面版。', 'On-demand execution requires the LitGraph desktop app.'); errorHost.hidden = false; return; }
+    if (settingsHaveActiveWork()) return toast(panelText('请先完成或暂停当前 AI 任务。', 'Finish or pause current AI tasks first.'));
+    const controls = ['#connect-agent-runtime', '#choose-agent-runtime', '#agent-runtime-provider', '#test-api-button', '#disconnect-agent', '#copy-agent-instructions'].map(selector => document.querySelector(selector));
+    controls.forEach(control => control.disabled = true);
+    errorHost.hidden = true;
+    const connect = document.querySelector('#connect-agent-runtime');
+    connect.textContent = panelText('验证中…', 'Verifying…');
+    try {
+      const result = await desktop.agentRuntime(action, { provider: document.querySelector('#agent-runtime-provider').value });
+      if (result) { await refreshExternal(); updateModelBadge(); }
+    } catch (error) {
+      errorHost.textContent = panelText(`未能接入：${localizedError(error, language)}`, `Connection failed: ${localizedError(error, language)}`);
+      errorHost.hidden = false;
+    } finally {
+      controls.forEach(control => control.disabled = false);
+      connect.textContent = panelText('连结并验证', 'Connect & verify');
+    }
+  });
+}
 document.querySelector('#disconnect-agent').addEventListener('click', async () => {
-  await localRequest('disconnect', {}); await refreshExternal(); updateModelBadge();
+  try { await localRequest('disconnect', {}); await refreshExternal(); updateModelBadge(); }
+  catch (error) { toast(localizedError(error, language)); }
 });
 // Status is based on authenticated activity, never on copying the instructions.
 async function pollExternalAgent() {
@@ -4509,6 +5148,7 @@ document.querySelector('#add-papers-button').addEventListener('click', () => {
   if (importProgress.ready) commitImportedPapers();
   else openPaperImportDialog();
 });
+document.querySelector('#paper-import-history-toggle').addEventListener('click',()=>{paperImportHistoryOpen=!paperImportHistoryOpen;renderPaperImportHistory();});
 document.querySelector('#paper-file-picker').addEventListener('click', (event) => {
   event.stopPropagation();
   document.querySelector('#document-input').click();
@@ -4532,10 +5172,11 @@ document.querySelector('#document-input').addEventListener('change', (event) => 
   stagePaperFiles(event.target.files);
   event.target.value = '';
 });
-workspace.addEventListener('dragenter', (event) => { event.preventDefault(); dropOverlay.classList.add('show'); });
-workspace.addEventListener('dragover', (event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; });
+workspace.addEventListener('dragenter', (event) => { if (![...event.dataTransfer.types].includes('Files')) return; event.preventDefault(); dropOverlay.classList.add('show'); });
+workspace.addEventListener('dragover', (event) => { if (![...event.dataTransfer.types].includes('Files')) return; event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; });
 workspace.addEventListener('dragleave', (event) => { if (!workspace.contains(event.relatedTarget)) dropOverlay.classList.remove('show'); });
 workspace.addEventListener('drop', (event) => {
+  if (![...event.dataTransfer.types].includes('Files')) return;
   event.preventDefault();
   dropOverlay.classList.remove('show');
   openPaperImportDialog(event.dataTransfer.files);
@@ -4597,6 +5238,12 @@ updateModeButtons();
 saveCurrentProject();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveCurrentProject(); });
 window.addEventListener('beforeunload', saveCurrentProject);
+if(desktop?.institution){
+  desktop.onInstitutionDownload?.(()=>void receiveInstitutionDownloads());
+  setInterval(()=>void receiveInstitutionDownloads(),2500);
+
+  window.addEventListener('focus',()=>void receiveInstitutionDownloads());
+}
 window.setTimeout(() => {
   if (view === 'semantic' && renderMode === '2d' && layoutBasis === 'argument') fitView(380);
 }, 700);

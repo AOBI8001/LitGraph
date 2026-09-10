@@ -5,6 +5,7 @@ output/
 .DS_Store
 # Private libraries, full text, credentials and local process artifacts.
 projects/
+data/
 versions/
 .playwright-cli/
 .env
@@ -20,3 +21,6 @@ Thumbs.db
 .wrangler/
 release/
 artifacts/
+# Local investigations may inspect private installed profiles; not publication assets.
+tests/diagnostics/
+tests/real-institution-paper.mjs

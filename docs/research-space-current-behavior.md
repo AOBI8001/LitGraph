@@ -1,10 +1,10 @@
 # Research space: current behavior
 
-LitGraph 1.0.
+LitGraph 1.1.8.
 
 The subtitle is “回答以原文证据为依据，AI 推断会额外标出。” / “Answers are grounded in source evidence; AI inferences are explicitly marked.”
 
-Choose a single paper, selected papers or the project-wide scope. Tabs keep conversations separate. Windows can be moved and resized; the composer accepts supported local attachments.
+Choose a single paper, selected papers or the project-wide scope. Tabs keep conversations separate and can be dragged horizontally to reorder without replacing their conversations or drafts. Tab dragging does not activate the file-drop overlay. Windows can be moved and resized; the composer accepts supported local attachments.
 
 Enter sends; Shift+Enter adds a line. During a request, the control becomes a stop button and displays elapsed time. Stopping cancels the request. Continuing resubmits the previous question; it does not resume the provider's hidden reasoning. New input switches back to sending a new question.
 

@@ -1,6 +1,6 @@
 # LitGraph project data contract
 
-LitGraph 1.0. Graph format remains schemaVersion 0.1; application version is independent.
+LitGraph 1.1.8. Graph format remains schemaVersion 0.1; application version is independent.
 
 Import / export project JSON through the LitGraph project controls. External Agent tasks normally return results through the local API, not by modifying project files directly.
 
@@ -55,15 +55,21 @@ Discovery adds source provenance: metadataSource / metadataSources, metadataApiU
 
 Source reference lists use referenceOpenAlexIds, referenceDois and referenceRecords. The last field preserves available DOI, unstructured text, author, year and title, not a guarantee that every reference is complete. These fields are distinct from a formatted citation for the node itself.
 
-Durable full-text bindings use fulltextKey, originalRelativePath, markdownRelativePath, fulltextStatus, fulltextPersistence and conversionQuality. Paths resolve beneath projects/local-fulltext-index in the current data root: the Windows application-data directory for the desktop build, or the repository root for the developer preview. They do not resolve inside the installed program archive. fulltextStorageKey refers to an optional IndexedDB cache. fulltextError explains failed acquisition or extraction. indexed means available extracted text, not guaranteed OCR of all pages or verified table/formula reconstruction. See the discovery contract for state meanings and backup requirements.
+Durable full-text bindings use fulltextKey, originalRelativePath, markdownRelativePath, fulltextStatus, fulltextPersistence and conversionQuality. Original PDFs resolve beneath `data/originals`, Markdown beneath `data/markdown`, and source/index JSON beneath `data/records` in the current data root: the Windows application-data directory for the desktop build, or the repository root for the developer preview. They do not resolve inside the installed program archive. Legacy `projects/local-fulltext-index` records migrate by copying on read while preserving the old files. fulltextStorageKey refers to an optional IndexedDB cache. fulltextError explains failed acquisition or extraction. indexed means available extracted text, not guaranteed OCR of all pages or verified table/formula reconstruction. See the discovery contract for state meanings and backup requirements.
+
+`analysisStatus` tracks analysis independently of full-text availability. A completed summary/classification may have `analysisWarnings` describing discarded relationship proposals; a rejected edge is not a failed PDF conversion or a missing summary. `analysisCoverage` records the supplied peer IDs and relationship-validation totals. Do not turn an evidence-validation warning into a fabricated edge or an unsupported claim of exhaustive comparison.
 
 ## Relations
 
 semanticLinks entries contain id, source, target, relation (support / oppose / related), strength and optional rationale. Both endpoints must exist in nodes. Do not fabricate support/conflict evidence.
 
+Original-analysis links additionally retain matching source and target quotations. Invalid proposals are rejected individually; validated links and valid paper-level analysis remain usable. Removing a paper removes its project node and incident links; source files are retained on disk unless a separate file-removal action is explicitly performed.
+
 citationLinks entries contain id, source and target: source cites target. A publication being older is not proof of a citation. Only verified references justify real citation edges.
 
 Theory IDs referenced by nodes must exist in theories. label and labelEn support bilingual interface labels without altering the original paper title.
+
+Project snapshots, analysis artifacts and computed graph-layout vectors are saved separately under `data/projects`, `data/analysis` and `data/vectors`. An empty vector list means no computed vectors were available for that snapshot. It is not permission to invent values or claim that full-text vector retrieval has run.
 
 ## Release safety
 

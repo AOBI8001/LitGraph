@@ -1,10 +1,20 @@
 # LitGraph 外部 Agent 使用指南
 
+## 桌面版按需调用（Codex CLI / Claude Code）
+
+“连结并验证”使用官方 CLI 按需处理检索、文献分析和研究问答，无需持续挂着聊天任务。详见 [按需调用与边界](on-demand-agent.md)。API 与 Agent 共用 [输出格式和机构接收规范](model-output-and-access.md)。每个任务携带对应规范和原文证据，不要求 CLI 读取本指南或注册 MCP，不接管其他聊天。
+
+**下面的握手和持续任务循环只适用于“其他工具：手动 MCP 接入”，不是按需 CLI 的步骤。** 两种路径不能同时领取任务。
+
 这是一份所有 Agent 共用的指南，不依赖特定厂商。工作目录是接入说明中的文件夹：桌面版为用户数据目录，开发预览为项目目录。这不是要求你修改源代码。用户的目的是让你处理 LitGraph 界面发来的 AI 请求。
 
 ## 接入与身份
 
-复制文本提供当前页面专用的本地 STDIO MCP 配置。command 是运行时的绝对路径，args 包含适配器路径、本机 URL 和私有连接凭据。桌面版复用 LitGraph 内置运行时，并附带 env 中的 ELECTRON_RUN_AS_NODE=1，无需用户另装 Node；必须完整保留这项 env。在你的 MCP 配置界面添加名为 litgraph 的服务。首次可能需要重新加载工具或开始新会话；不要只写配置就宣称已连接。
+复制文本提供本地 STDIO MCP 配置。安装版 args 包含适配器路径和 `--connection-file` 后面的连接文件路径。将这份配置一次性注册到客户端的持久化设置；适配器会在每次调用时读取当前端口与凭据，软件重启后无需重新复制。不得硬编码端口或把连接文件内容写入聊天、日志或仓库。浏览器预览仍使用临时 URL 与凭据。
+
+桌面版复用 LitGraph 内置运行时，并附带 env 中的 `ELECTRON_RUN_AS_NODE=1`，无需用户另装 Node；必须完整保留这项 env。首次可能需要重新加载工具或开始新会话；不要只写配置就宣称已连接。
+
+安装版使用系统剪贴板复制接入说明，文本中的路径来自当前用户的安装位置和数据目录。浏览器预览受浏览器剪贴板权限限制；复制失败时用户可重新聚焦窗口或手动复制，不得把复制成功当成握手成功。
 
 连接后调用 litgraph_connect，model 填实际模型名称；若不知道，明确填“工具名称（模型未知）”，不要猜测版本。vision 只有当前模型与客户端都能读取 MCP 图片内容时才为 true。该名称和能力是 Agent 自报，不是服务商认证。API 密钥仍由你的原工具管理，禁止读取 LitGraph 的 API 密钥、浏览器登录凭据或其他项目文件。
 
@@ -18,13 +28,13 @@
 4. litgraph_submit_result，id 为领取的任务 ID，result 为完整输出字符串（通常是 JSON 字符串），不是对象。任务已取消时停止提交，不创建替代任务。
 5. 回到步骤 2，直到用户要求停止。停止前 litgraph_disconnect。
 
-每 5 分钟内至少调用一次工具维持连接，长任务可调用 litgraph_context 续期。正在思考和查找资料时也要注意续期。网站最多等待 15 分钟。页面刷新、重新复制连接说明、主动断开都会使旧连接失效。暂停会取消任务；继续会重新发起同一问题，不是恢复模型内部推理。
+每 5 分钟内至少调用一次工具维持连接，长任务可调用 litgraph_context 续期。正在思考和查找资料时也要注意续期。网站最多等待 15 分钟。安装版重启后，仍运行的适配器会用已报告的身份重新握手；适配器进程重启则需再次调用 connect，但不用重新配置。用户在模型接入中主动断开会撤销授权，重新授权需用户再次复制接入说明。软件关闭时未完成的任务不能被当作已完成，重开后由用户重新发送。暂停后继续也不是恢复模型内部推理。
 
 **不能在回复“已连接”后结束当前任务。** 这不是永久运行的大模型服务：如果你的工具不能持续等待或受运行时限制，必须向用户说明。网站绿灯只能证明最近握手/工具活动，不证明模型一定能搜索互联网，也不证明工具会永远运行。
 
 ## 当前会话无法重新加载 MCP 时
 
-可通过相同的受限本地 HTTP 工具接口处理任务，这是兼容方式，不是假称已加载 MCP：POST `${URL}/__litgraph/agent`，Authorization 为 `Bearer ${连接凭据}`，Content-Type 为 application/json，body 为 `{"name":"litgraph_next_task","arguments":{"wait_ms":25000}}`。所有上述工具均可使用此入口。服务只接受 loopback，不要暴露到公网。不要把凭据写入仓库、日志、共享说明或聊天回复。
+可通过相同的受限本地 HTTP 工具接口处理任务，这是兼容方式，不是假称已加载 MCP。安装版从连接文件读取当前 `url`、`token`、`enabled` 与 `running`，仅这份连接文件获准读取，不得扩大到浏览器会话或模型配置。POST `${url}/__litgraph/agent`，Authorization 为 `Bearer ${token}`，Content-Type 为 application/json，body 为 `{"name":"litgraph_next_task","arguments":{"wait_ms":25000}}`。关闭时等待，重启后重新读取文件与握手。服务只接受 loopback，不要暴露到公网或公开凭据。
 
 ## 研究回答规范
 
@@ -40,12 +50,30 @@
 
 ## 文献发现规范
 
-- 文献发现分为两个 AI 任务：检索规划返回 queries / summary；相关性评估返回 assessments（每条包含输入 id、0–100 的 score 和 reason）。具体以本次 messages 为准，详见 [可执行规范](literature-discovery-agent-spec.md)。
+检索与下载共用 LitGraph 原生本地核心，仅复用 ScanSci 的机构网关配置及必要网址转换逻辑，不运行其 Python 包或全来源竞速。API 模式和外部 Agent 模式没有权限等级差异。可以调用 `litgraph_download_status` 检查引擎；用户明确要求直接检索时调用 `litgraph_scholarly_search`。正常的检索策略任务仍只返回任务要求的 JSON，由软件继续检索，不要重复发起搜索。
+
+用户授权获取原文后，`litgraph_acquire_start` 为当前项目中已有的论文节点获取匹配的来源记录，立即返回 taskId；用 `litgraph_acquire_status` 查询、`litgraph_acquire_cancel` 暂停。机构请求直接复用桌面版同一 Electron 会话，不向另一浏览器或工作进程导出 Cookie；禁止向用户索取 Cookie 或读取浏览器数据库。原文保存成功不等于 MD 转换和 AI 分析完成；让已有导入任务继续处理，不要伪报完整完成。详细边界见 `scansci-integration.md`。
+
+网页预览只具有本机服务的开放获取能力，不具有桌面版机构浏览器的登录会话。不要把用户在普通浏览器或其他软件里的登录当作 LitGraph 已认证，也不要因为保存了机构网址便承诺下载成功。遇到此限制，应明确提示使用桌面版机构窗口或补充用户合法取得的原文。
+
+机构模式的开放路径与机构路径分别有 30 秒预算，连续使用两条路径可占约 60 秒获取时间；转换和模型分析另计。一次获取可访问多个不同的已核验来源，但不反复重试同一候选地址，普通获取失败后继续下一篇；遇到机构登录、验证或封锁则停留原页面、暂停下载队列，等待用户完成并保存状态。人工等待不计入机构网络超时。历史面向用户展示处理状态与原因，不显示尝试次数。不要向用户承诺整个批次、转换或 AI 回答都在 30 秒内完成。
+
+- 文献发现包含两个阶段的 AI 任务：检索规划返回 queries / summary；软件检索结果直接显示，不调用 AI 点评；下载后的原文分析返回 summary、label、keywords、theory、relationships。具体以本次 messages 为准，详见 [可执行规范](literature-discovery-agent-spec.md)。
+- 原文分析的每条关系必须给出两端输入原文中可匹配的连续引文，不编造节点 ID 或引用边；不足以支持关系时返回空数组。不限文献语言时优先生成英文检索词，不把中文来源改写成英文来源。
+- 引文保留原文语言，不能把翻译、转述或省略拼接当成连续原句。软件逐条验证关系，舍弃无依据的关系并保留有效总结和归类；这不降低 Agent 的证据标准，也不要求为了凑连线反复生成相似猜测。
 - LitGraph 本地服务负责真实数据库检索、分页和筛选；没有自带联网工具也能完成上述 AI 任务，不应因此返回 search_unavailable。
 - 不凭记忆生成论文，不添加/遗漏评估 ID，不改写输入记录的作者、标题、DOI、摘要、被引量或访问权限。
 - 评估仅依据任务提供的元数据和摘要判断相关性，不冒充已阅读全文。说明使用界面语言。
-- 用户确认后由软件补全来源字段、获取合法开放 PDF、保存 PDF / MD 并绑定节点。机构网址不代表共享浏览器登录状态；受限全文需要用户合法下载并导入，扫描件需要 OCR。
+- 用户确认后由软件获取全文并保存 PDF / MD。优先尝试公共开放全文；机构模式在未成功时使用软件内真实机构窗口的会话获取授权全文，不接入绕过出版方授权的渠道。机构账号、验证码和权限由用户与机构网页处理，禁止 Agent 读取或导出 Cookie。软件可接收用户在机构网页点击下载的 PDF 并继续处理；VPN、额外认证、受限平台可能需要用户手动操作。不得承诺所有学校或任意批量下载都可用。
+- 下载、转换、分析每一步默认执行一次，失败跳过，已完成内容保留，只有用户点击继续才补做失败步骤。一次下载可尝试不同的已核验来源位置，但不反复重试同一下载地址；开放获取共享 30 秒预算、最多六个候选地址、两个候选并发。不要启动另一套无界下载流程。回答使用正常 Markdown 段落、列表、加粗及表格，界面安全排版；禁止 HTML、脚本或伪造来源。
 
 ## 数据与权限
 
-任务只通过接口回传结果；不要直接修改项目 JSON、删除论文或改写软件。应用负责校验和保存结果。新取得的 PDF、MD 和来源记录保存在上述工作目录的 projects/local-fulltext-index，文献发现导入快照保存在 projects/local-projects；另有会话内 IndexedDB 缓存。桌面版在用户数据目录保存完整工作区状态和加密模型配置；这些文件不是 Agent 的输入，不得读取。不得读取或导出机构 Cookie。向模型发送的论文片段可能由模型服务商处理，这不是离线模型。
+任务只通过接口回传结果；不要直接修改项目 JSON、删除论文或改写软件。应用负责校验和保存结果。上述数据根目录的 `data/originals` 保存 PDF，`data/markdown` 保存转换文本，`data/records` 保存来源索引和处理历史，`data/projects` 保存项目快照，`data/analysis` 保存分析，`data/vectors` 保存实际已计算的图谱布局向量。旧版文件由软件兼容读取及迁移，不需要 Agent 搬动。另有会话内 IndexedDB 缓存。
+
+用户可在“设置 → 数据文件夹”打开分类目录。桌面版还在数据根目录保存完整工作区状态和加密模型配置；这些文件不是 Agent 的输入，不得读取。不得读取或导出机构 Cookie。向模型发送的论文片段可能由模型服务商处理，这不是离线模型。
+## Built-in institution browser / 内置机构浏览器
+
+API 和外部 Agent 共用全文获取服务。先尝试开放获取；未获取到且选择机构渠道时，在持久化机构浏览器中打开论文并保存有权限的 PDF。用户自行登录及完成人机验证，模型不得读取密码、Cookie 或验证令牌。遇到登录、验证或封锁页时保留当前页面，暂停下载队列，等待用户点击“保存状态并退出”后重新检查。仍未通过则继续等待，不得将等待视为成功或跳到其他论文继续请求。应用负责 PDF 保存、MD 转换、分析与历史更新。
+
+Both model modes share the same acquisition service. After open-access retrieval fails, use the persistent authenticated institution browser when selected. Preserve authentication/verification pages and suspend the acquisition queue until the user chooses Save session & close. Recheck before resuming; never click challenges or export credentials. The app owns PDF persistence, conversion, analysis and history updates.

@@ -2,7 +2,7 @@
 
 ## Current boundary
 
-LitGraph 1.0 is a Windows Electron application with a loopback-only local service. The separate developer web preview is not a hardened multi-user hosting backend. Do not expose either local service publicly.
+LitGraph 1.1.8 is a Windows Electron application with a loopback-only local service. The separate developer web preview is not a hardened multi-user hosting backend. Do not expose either local service publicly.
 
 The desktop build encrypts API configuration with Electron safeStorage backed by Windows and keeps it separate from project backups. It does not use plaintext fallback if encryption is unavailable. This does not protect against malicious processes already running as the same Windows user. The web development preview still stores API configuration in browser localStorage. Model requests can contain excerpts, questions and attachments: choose a trusted service and review its retention policy. Local-first does not mean entirely offline.
 
@@ -24,7 +24,7 @@ Treat paper contents, web pages and attachments as untrusted data. Prompts requi
 
 The official desktop build sends minimal installation/launch/use events. It does not send document contents, model keys or hardware identifiers. An opt-out is available under Settings → About LitGraph. The collector stores HMAC installation IDs and aggregate counts, and the dashboard requires a separate secret. See [Privacy](PRIVACY.md) and [Metrics](docs/metrics.md). Network infrastructure still processes connection information.
 
-Version 1.0 is unsigned. A checksum verifies integrity, not trusted publisher identity. Only use official repository downloads. Tests cover known scenarios and do not guarantee absence of defects or vulnerabilities.
+Official installers are unsigned. A checksum verifies integrity, not trusted publisher identity. Only use official repository downloads. Tests cover known scenarios and do not guarantee absence of defects or vulnerabilities.
 
 ## Reporting
 

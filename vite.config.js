@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { localService } from './scripts/local-service.js';
 const root = fileURLToPath(new URL('.', import.meta.url));
 export default defineConfig(({ command, mode }) => ({
+  server: { watch: { ignored: ['**/output/**', '**/release/**', '**/data/**', '**/projects/**'] } },
   plugins: [
     {
       name: 'litgraph-sample',

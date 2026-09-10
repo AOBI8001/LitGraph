@@ -12,10 +12,10 @@ const required = ['desktop/main.mjs', 'desktop/preload.cjs', 'desktop/metrics.mj
 for (const file of required) assert.ok(files.includes(file), 'Missing packaged file: ' + file);
 for (const file of files) assert.doesNotMatch(file, /(^|\/)(output|projects|tests|\.git|\.wrangler|node_modules)(\/|$)|\.local\.json$|\.env$|\.pem$|\.key$/, 'Private or unnecessary packaged path');
 const manifest = JSON.parse(asar.extractFile(archive, 'package.json').toString());
-assert.equal(manifest.version, '1.0.0');
+assert.equal(manifest.version, JSON.parse(await readFile('package.json','utf8')).version);
 assert.equal(manifest.license, 'MIT');
 const contents = await readFile(archive);
-for (const value of ['TEST-ONLY-NOT-A-REAL-KEY', 'D:\\workbuddy\\', 'C:\\Users\\AOBI\\']) assert.ok(!contents.includes(Buffer.from(value)), 'Machine/test data included');
+for (const value of ['TEST-ONLY-NOT-A-REAL-KEY', path.resolve('.')+path.sep, process.env.USERPROFILE+path.sep]) assert.ok(!contents.includes(Buffer.from(value)), 'Machine/test data included');
 const localSecrets = await readFile('output/metrics-admin.local.json', 'utf8').then(JSON.parse).catch(() => ({}));
 for (const value of Object.values(localSecrets)) if (typeof value === 'string' && value.length > 20) assert.ok(!contents.includes(Buffer.from(value)), 'Operator secret included');
 console.log(JSON.stringify({ passed: true, files: files.length, requiredFiles: required.length, version: manifest.version, privateDataExcluded: true }));

@@ -54,7 +54,9 @@ try {
   });
   try {
     assert.equal((await request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } })).serverInfo.name, 'litgraph');
-    assert.equal((await request('tools/list')).tools.length, 5);
+    const names=(await request('tools/list')).tools.map(t=>t.name);
+    assert.equal(names.length, 10);
+    for(const name of ['litgraph_scholarly_search','litgraph_acquire_start','litgraph_acquire_status','litgraph_acquire_cancel','litgraph_download_status'])assert.ok(names.includes(name));
     const connected = await request('tools/call', { name: 'litgraph_connect', arguments: { model: 'MCP protocol test' } });
     assert.equal(JSON.parse(connected.content[0].text).connected, true);
     const pending = (await call('tasks', { messages: [{ role: 'user', content: 'MCP roundtrip' }] }, b.browserToken)).data;

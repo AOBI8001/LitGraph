@@ -1,5 +1,6 @@
 import { localRequest } from './external-agent.js';
 import { selectEvidence } from './research-evidence.js';
+import { assessPdfTextQuality, readablePdfPage } from './pdf-text-quality.js';
 let dbPromise;
 const sourceCache = new Map();
 function database() {
@@ -18,7 +19,8 @@ async function storage(key, value) {
     tx.oncomplete = () => resolve(request.result); tx.onerror = () => reject(tx.error);
   });
 }
-export async function extractFile(file) {
+export async function extractFile(file, { signal, onProgress } = {}) {
+  signal?.throwIfAborted();
   if (file.size > 40 * 1024 * 1024) throw new Error('单个文档请小于 40 MB。');
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext === 'pdf') {
@@ -26,10 +28,16 @@ export async function extractFile(file) {
     const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
     pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
     const loadingTask = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false });
-    const pdf = await loadingTask.promise;
     let markdown = `# ${file.name}\n`, characterCount = 0;
+    const pageTexts=[];
+    let pageCount = 0;
+    const abort = () => { void loadingTask.destroy().catch(() => {}); };
+    signal?.addEventListener('abort', abort, { once: true });
     try {
+      const pdf = await loadingTask.promise;
+      pageCount = pdf.numPages;
       for (let p = 1; p <= pdf.numPages; p++) {
+        signal?.throwIfAborted();
         const page = await pdf.getPage(p), content = await page.getTextContent();
         let text = '', lastY;
         for (const item of content.items) {
@@ -39,16 +47,36 @@ export async function extractFile(file) {
           text += item.str + (item.hasEOL ? '\n' : ' '); lastY = y;
         }
         characterCount += text.trim().length;
-        markdown += `\n## PDF Page ${p}\n\n${text.trim()}\n`; page.cleanup();
+        pageTexts.push(text);
+        page.cleanup();
+        onProgress?.(p, pdf.numPages);
       }
-    } finally { await loadingTask.destroy(); }
-    if (characterCount < 40) throw new Error('PDF 没有足够的可提取文字，可能是扫描件。请先 OCR，再上传 PDF 或 MD。');
-    return { markdown, fileName: file.name.replace(/\.pdf$/i, '.md'), sourceKind: 'pdf_text', conversionQuality:'text_extraction', pageCount:pdf.numPages, original: file };
+    } finally { signal?.removeEventListener('abort', abort); await loadingTask.destroy(); }
+    if (characterCount < 40) throw Object.assign(new Error('PDF 没有足够的可提取文字，可能是扫描件。请先 OCR，再上传 PDF 或 MD。'),{permanent:true});
+    const textQuality=assessPdfTextQuality(pageTexts);
+    if(!textQuality.usable)throw Object.assign(new Error('PDF 的文字编码异常，提取结果不可靠。原文已保留，请先 OCR 或补充可读的 PDF / MD 后继续。'),{permanent:true,code:'pdf_text_unreliable'});
+    markdown += pageTexts.map((text,index)=>`\n## PDF Page ${index+1}\n\n${textQuality.uncertainPages.includes(index+1)?'> Extraction note: [unmapped PDF symbol] marks a glyph that could not be decoded. Do not infer missing operators or use affected expressions as numerical evidence; consult the original PDF.\n\n':''}${readablePdfPage(text.trim())}\n`).join('');
+    return { markdown, fileName: file.name.replace(/\.pdf$/i, '.md'), sourceKind: 'pdf_text', conversionQuality:'text_extraction', textQuality, pageCount, original: file };
   }
   if (!['md', 'txt', 'csv', 'json', 'tex'].includes(ext)) throw new Error('研究材料支持 PDF、MD、TXT、CSV、JSON、TeX。请先将其他格式转换为 PDF 或 MD。');
   const markdown = (await file.text()).replace(/\r\n/g, '\n').replace(/\u0000/g, '');
   if (!markdown.trim()) throw new Error('文件没有可读取的文字。');
   return { markdown, fileName: file.name, sourceKind: ext === 'md' ? 'markdown' : 'text', original: file };
+}
+// Commit the source before conversion. A failed worker must never lose the user's PDF.
+export async function saveOriginalFile(projectId, node, file) {
+  const key = `${projectId}:${node.id}`;
+  sourceCache.delete(node.fulltextKey || `${node.id}:${node.doi}:${node.title}`);
+  await storage(key, { original: file, fileName: file.name }).then(() => { node.fulltextStorageKey = key; }).catch(() => {});
+  if (/\.pdf$/i.test(file.name)) {
+    if (file.size > 40 * 1024 * 1024) throw Error('单个文档请小于 40 MB。');
+    const originalData = await new Promise((resolve,reject) => { const reader=new FileReader(); reader.onload=()=>resolve(reader.result.split(',')[1]); reader.onerror=()=>reject(reader.error); reader.readAsDataURL(file); });
+    const saved = await localRequest('document', { projectId, nodeId:node.id, fileName:file.name, originalData, replaceOriginal:true });
+    Object.assign(node, { fulltextKey:saved.key, originalRelativePath:saved.originalRelativePath, markdownRelativePath:'', hasPdf:true, fulltextStatus:'downloaded', fulltextPersistence:'disk' });
+  } else {
+    await saveFulltext(projectId,node,await extractFile(file));
+    if (node.fulltextPersistence !== 'disk') throw Error('原文尚未保存到磁盘，请检查可用空间。');
+  }
 }
 export async function saveFulltext(projectId, node, document) {
   const key = `${projectId}:${node.id}`;
@@ -72,7 +100,7 @@ export async function saveFulltext(projectId, node, document) {
   return document;
 }
 export async function getFulltext(node) {
-  if (node.fulltextStorageKey) { const cached = await storage(node.fulltextStorageKey).catch(() => null); if (cached) return cached; }
+  if (node.fulltextStorageKey) { const cached = await storage(node.fulltextStorageKey).catch(() => null); if (cached?.markdown) return cached; }
   const cacheKey = node.fulltextKey || `${node.id}:${node.doi}:${node.title}`;
   if (sourceCache.has(cacheKey)) return sourceCache.get(cacheKey);
   const document = await localRequest('document', node.fulltextKey ? { key: node.fulltextKey } : { node: { id: node.id, doi: node.doi, title: node.title } }).catch(() => null);
