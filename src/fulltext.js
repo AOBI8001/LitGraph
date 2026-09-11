@@ -29,7 +29,9 @@ export async function extractFile(file, { signal, onProgress } = {}) {
     const pdfjs = await import('pdfjs-dist');
     const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
     pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-    const loadingTask = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false });
+    const resourceBase = `${import.meta.env.BASE_URL}pdfjs/`;
+    const loadingTask = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false,
+      cMapUrl: resourceBase+'cmaps/', cMapPacked:true, standardFontDataUrl:resourceBase+'standard_fonts/', wasmUrl:resourceBase+'wasm/' });
     let markdown = `# ${file.name}\n`, characterCount = 0;
     const pageTexts=[];
     let pageCount = 0;

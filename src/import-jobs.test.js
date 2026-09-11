@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import {createImportJob,restoreJobs,processImportItem,processImportBatch,jobCounts,moveTab} from './import-jobs.js';
+import {createImportJob,restoreJobs,processImportItem,processImportBatch,jobCounts,moveTab,setImportCanvasVisibility} from './import-jobs.js';
+test('resume analyzes existing MD before retrying broken PDFs and uses the current provider',async()=>{
+ const items=[{nodeId:'broken',downloaded:true,converted:false,stage:'error'},{nodeId:'ready',downloaded:true,converted:true,stage:'paused'}],calls=[],signal=new AbortController().signal;
+ let provider='codex';
+ await processImportBatch(items,(item,stages)=>processImportItem(item,{save(){},reconcile:async()=>{},download:async()=>assert.fail('original already saved'),convert:async()=>{calls.push('convert');throw Error('needs OCR');},analyze:async()=>calls.push(provider)},signal,{stages}),{signal});
+ assert.deepEqual(calls,['codex','convert']);assert.equal(items[1].stage,'done');
+});
+test('stage checkpoint finishes before another stage starts, including pause after response',async()=>{
+ const controller=new AbortController(),item={downloaded:true,converted:true};let persisted=false;
+ await assert.rejects(processImportItem(item,{save(){},reconcile:async()=>{},analyze:async()=>controller.abort(),checkpoint:async()=>{assert.equal(item.analyzed,true);await Promise.resolve();persisted=true;}},controller.signal));
+ assert.equal(persisted,true);assert.equal(item.analyzed,true);
+});
+test('redraw hides only unfinished import nodes, preserves data and continue restores them',()=>{
+ const nodes=[{id:'a',analysisStatus:'done',primaryTheory:'t'},{id:'b',analysisStatus:'pending',primaryTheory:'unclassified'},{id:'other',analysisStatus:'pending'}],job={items:[{nodeId:'a'},{nodeId:'b'}]};
+ setImportCanvasVisibility(nodes,job,true);assert.equal(nodes[0].importCanvasHidden,false);assert.equal(nodes[1].importCanvasHidden,true);assert.equal(nodes[2].importCanvasHidden,undefined);assert.equal(nodes.length,3);
+ setImportCanvasVisibility(nodes,job,false);assert.equal(nodes[1].importCanvasHidden,false);assert.equal(job.items.length,2);
+});
 test('pause saves a completed stage and resume does not repeat it',async()=>{
  const job=createImportJob('p','query',{language:'en'}),item={nodeId:'n',stage:'pending'};job.items.push(item);
  let downloads=0,converts=0,analyses=0,saves=0;const controller=new AbortController();

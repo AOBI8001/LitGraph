@@ -3504,8 +3504,8 @@ html[lang="en"] .discovery-choice.discovery-source-beta { padding-right: 27px; }
 .history-heading span, .history-empty { font-size: 11px; color: var(--muted); }
 .discovery-history-row { padding: 0; margin: 0 0 8px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .history-summary { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 14px; border: 0; background: transparent; color: var(--ink); text-align: left; font: inherit; cursor: pointer; }
-.history-summary { cursor: default; }
-.history-summary-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.history-summary { cursor: default; flex-wrap: wrap; }
+.history-summary-actions { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; max-width: 100%; }
 .history-summary-actions button { padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--tool-accent,#7445bf); font: inherit; font-size: 10px; white-space: nowrap; cursor: pointer; }
 .history-summary-actions button:hover:not(:disabled),.history-summary-actions button[aria-expanded="true"] { background: var(--tool-tint); border-color: var(--tool-accent,#7445bf); }
 .history-summary-actions button:disabled { color: var(--muted); opacity: .55; cursor: default; }

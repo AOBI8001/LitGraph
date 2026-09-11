@@ -116,6 +116,7 @@ export function localService(root, dependencies = {}) {
   let catalogWrite = Promise.resolve();
   const historyPath = path.join(folders.records, 'discovery-history.json');
   let historyWrite = Promise.resolve();
+  const projectWrites = new Map();
   async function atomicWrite(file, content) {
     await mkdir(path.dirname(file), { recursive: true });
     const temporary = file + '.' + randomUUID() + '.tmp';
@@ -437,11 +438,16 @@ export function localService(root, dependencies = {}) {
       }
       if(url.pathname==='/__litgraph/project'&&req.method==='POST'){
         if(!data.projectId||!Array.isArray(data.project?.nodes))throw new Error('Invalid project snapshot.');
+        const previous=projectWrites.get(data.projectId)||Promise.resolve();
+        const write=previous.catch(()=>{}).then(async()=>{
         await ensureFolders();
         await atomicWrite(path.join(folders.projects,digest(data.projectId)+'.json'),JSON.stringify(data.project));
         const nodes=data.project.nodes;
         await atomicWrite(path.join(folders.analysis,digest(data.projectId)+'.json'),JSON.stringify({projectId:data.projectId,papers:nodes.map(node=>({id:node.id,title:node.title,analysisStatus:node.analysisStatus,summary:node.summary||node.aiSummary,summaryZh:node.aiSummaryZh,summaryEn:node.aiSummaryEn,claimLabel:node.claimLabel||node.claim,keywords:node.keywords,primaryTheory:node.primaryTheory,analysisCoverage:node.analysisCoverage,analysisWarnings:node.analysisWarnings})),theories:data.project.theories,semanticLinks:data.project.semanticLinks,citationLinks:data.project.citationLinks}));
         await atomicWrite(path.join(folders.vectors,digest(data.projectId)+'.json'),JSON.stringify({projectId:data.projectId,papers:nodes.filter(node=>node.embedding||node.semanticVector||node.vector).map(node=>({id:node.id,embedding:node.embedding||node.semanticVector||node.vector,method:node.semanticVectorMethod})),note:'Only computed vectors are saved. An empty list means no vectors have been generated.'}));
+        });
+        projectWrites.set(data.projectId,write);
+        try { await write; } finally { if(projectWrites.get(data.projectId)===write)projectWrites.delete(data.projectId); }
         return send(200,{saved:true});
       }
       if (url.pathname === '/__litgraph/status') return send(200, status(c));

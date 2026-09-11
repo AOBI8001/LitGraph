@@ -1,3 +1,31 @@
+# LitGraph 1.2.1
+
+## 中文
+
+安装文件：`LitGraph-Setup-1.2.1-x64.exe`（Windows 10 / 11 x64）。升级保留项目与原文；重要数据请先备份。
+
+- 修复大项目达到浏览器缓存配额后，项目状态无法可靠保存的问题。桌面端以磁盘状态为准，按阶段落盘，并串行保存同一项目的快照。
+- 暂停、重启或更换 API / 外部 Agent 后，可继续未完成阶段。现成 MD 优先进入分析，不再被待转换或失败 PDF 阻塞。
+- 历史记录新增“重新绘制画布”：重算布局，隐藏该次导入尚未分析的节点；文件、分析与记录保留，点击“继续”恢复节点显示。
+- 历史折叠时仍显示三项阶段进度，展开后才生成逐篇明细，减少大批次的界面刷新开销。
+- 补齐 PDF.js 本地字符映射、字体与解码资源，修复部分中文 PDF 因资源缺失而提取不到文字的问题。真正扫描件、损坏文件和异常编码仍可能需要 OCR 或可读替代文件。
+
+不承诺每份 PDF 均可转换，也不保证模型响应时长。安装包未代码签名，请核对同一 Release 的 `SHA256SUMS.txt`，并保留系统安全防护。本地用户数据和此次恢复用的 OCR 工作文件不包含在安装包中。
+
+## English
+
+Installer: `LitGraph-Setup-1.2.1-x64.exe` for Windows 10 / 11 x64. Upgrades retain projects and source files; back up important data first.
+
+- Desktop workspace persistence now tolerates browser-cache quota limits, checkpoints completed stages and serializes writes for each project.
+- Resume after pause, restart or an API / external Agent change. Existing Markdown is analyzed before retrying pending PDF conversions.
+- New **Redraw canvas** history action recalculates layout and hides unanalyzed nodes from that import without deleting source files, analyses or history. Continue restores their visibility.
+- Folded history keeps all three progress bars visible and generates individual details only when expanded.
+- Bundle local PDF.js character maps, fonts and decoder resources to fix missing-resource extraction failures in some Chinese PDFs. Scans, damaged files and broken encodings may still require OCR or readable replacements.
+
+Not every PDF is convertible, and model latency is not guaranteed. The installer is unsigned; verify the release's `SHA256SUMS.txt` and keep system protections enabled. Private user data and one-off OCR recovery files are not shipped.
+
+---
+
 # LitGraph 1.2.0
 
 [中文使用说明](README.md) · [English guide](README.en.md)

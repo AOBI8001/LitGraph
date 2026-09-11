@@ -22,6 +22,10 @@ const queue = ['d3', '3d-force-graph', 'three', 'three-spritetext', 'pdfjs-dist'
 // Dense RAG is offline at runtime; fail packaging rather than silently omit its model.
 await readFile('dist/models/manifest.json');
 await readFile('dist/models/Xenova/multilingual-e5-small/onnx/model_quantized.onnx');
+// CJK text extraction needs these local resources; missing maps can turn an
+// ordinary Chinese PDF into an apparently empty/scanned document.
+await readFile('dist/pdfjs/cmaps/Adobe-GB1-UCS2.bcmap');
+await readFile('dist/pdfjs/standard_fonts/LiberationSans-Regular.ttf');
 // Acquisition is packaged as native JS plus the pinned WebVPN registry. Fail
 // before packaging if a required implementation or attribution file is missing.
 for (const file of ['scripts/acquisition-core.js', 'scripts/institution-routing.js', 'scripts/scansci-service.js', 'desktop/browser-pdf.mjs', 'desktop/institution-search.mjs', 'desktop/institution-dom.mjs', 'desktop/institution-fulltext.mjs', 'vendor/scansci/webvpn.json', 'vendor/scansci/LICENSE', 'vendor/scansci/SOURCE.md']) await readFile(file);

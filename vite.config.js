@@ -2,11 +2,13 @@ import { defineConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 import { localService } from './scripts/local-service.js';
+import { pdfAssetsPlugin } from './scripts/pdf-assets.js';
 const root = fileURLToPath(new URL('.', import.meta.url));
 export default defineConfig(({ command, mode }) => ({
   worker: { format: 'es' },
   server: { watch: { ignored: ['**/output/**', '**/release/**', '**/data/**', '**/projects/**'] } },
   plugins: [
+    pdfAssetsPlugin(command),
     {
       name: 'litgraph-sample',
       resolveId(id) { if (id === 'virtual:litgraph-sample') return '\0litgraph-sample'; },

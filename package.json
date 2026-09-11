@@ -1,6 +1,6 @@
 {
   "name": "litgraph",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Local-first literature visualization and evidence-grounded research workspace",
   "author": "LitGraph contributors",
   "main": "desktop/main.mjs",
@@ -15,6 +15,7 @@
     "desktop": "electron .",
     "dist:win": "pnpm build && node scripts/prepare-desktop.mjs && electron-builder --win nsis --x64 --publish never",
     "test:desktop": "node tests/desktop-smoke.mjs",
+    "test:desktop:large-import": "node tests/desktop-large-import.mjs",
     "build": "vite build",
     "test": "node --test src/*.test.js scripts/*.test.js",
     "check:release": "node scripts/check-release.mjs",

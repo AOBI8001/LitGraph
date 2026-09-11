@@ -11,6 +11,13 @@ export function jobCounts(job) {
   const items = job.items;
   return { total: items.length, downloaded: items.filter(i => i.downloaded).length, converted: items.filter(i => i.converted).length, analyzed: items.filter(i => i.analyzed).length, completed: items.filter(i => i.stage === 'done').length, errors: items.filter(i => i.error).length };
 }
+export function setImportCanvasVisibility(nodes, job, processedOnly) {
+  const ids = new Set(job.items.map(item => item.nodeId));
+  for (const node of nodes) if (ids.has(node.id)) {
+    const complete = node.analysisStatus === 'done' && node.primaryTheory !== 'unclassified';
+    node.importCanvasHidden = Boolean(processedOnly && !complete);
+  }
+}
 export function moveTab(tabs, sourceId, targetId, after = false) {
   if (sourceId === targetId) return tabs;
   const item = tabs.find(t => t.id === sourceId);
@@ -26,11 +33,20 @@ export function moveTab(tabs, sourceId, targetId, after = false) {
 export async function processImportBatch(items, process, { signal, downloadConcurrency = 2 } = {}) {
   const pending = [...items].filter(item => item.stage !== 'done');
   const failed = new Set();
+  const analyzedFirst = new Set();
+  // On resume, usable MD must not wait behind hundreds of known-broken PDFs.
+  // Reconcile still checks actual storage before trusting these saved flags.
+  for (const item of pending.filter(item => item.converted)) {
+    signal?.throwIfAborted();
+    await process(item, ['analyzing']);
+    if (item.converted) analyzedFirst.add(item);
+  }
+  const toPrepare = pending.filter(item => !analyzedFirst.has(item));
   let cursor = 0, fatalError;
   const prepare = async () => {
-    while (cursor < pending.length && !fatalError) {
+    while (cursor < toPrepare.length && !fatalError) {
       signal?.throwIfAborted();
-      const item = pending[cursor++];
+      const item = toPrepare[cursor++];
       try { await process(item, ['downloading', 'converting']); }
       catch (error) { fatalError = error; throw error; }
       if (item.stage === 'error') failed.add(item);
@@ -43,14 +59,14 @@ export async function processImportBatch(items, process, { signal, downloadConcu
   if (failure) throw failure.reason;
   for (const item of pending) {
     signal?.throwIfAborted();
-    if (!failed.has(item) && item.stage !== 'done') await process(item, ['analyzing']);
+    if (!analyzedFirst.has(item) && !failed.has(item) && item.stage !== 'done') await process(item, ['analyzing']);
   }
 }
 export async function processImportItem(item, steps, signal, { maxAttempts = 1, wait = retryDelay, stages = ['downloading','converting','analyzing'] } = {}) {
   const run = async (stage, fn) => {
     for (let attempt=1; attempt<=maxAttempts; attempt++) {
       signal.throwIfAborted(); item.stage=stage; item.error=''; item.attempt=attempt; item.failedStage=stage; steps.save();
-      try { await fn(); steps.save(); signal.throwIfAborted(); return; }
+      try { await fn(); steps.save(); await steps.checkpoint?.(); signal.throwIfAborted(); return; }
       catch (error) {
         signal.throwIfAborted();
         if (attempt===maxAttempts || error.permanent) throw error;

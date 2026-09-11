@@ -4,7 +4,7 @@
 
 `desktop/agent-runtime.mjs` launches official Codex CLI / Claude Code processes. `scripts/local-service.js` routes search planning, paper analysis and research chat through one bounded queue. Each task carries its existing evidence/output contract; authentication remains with the user's CLI. See [on-demand execution](on-demand-agent.md) for cancellation, safety and limitations. Legacy manual MCP remains separate and cannot claim managed jobs.
 
-_LitGraph 1.2.0 · Windows desktop architecture and the separate developer web preview_
+_LitGraph 1.2.1 · Windows desktop architecture and the separate developer web preview_
 
 ---
 
@@ -23,6 +23,8 @@ The shared retrieval/download core is described in [scansci-integration.md](scan
 - `src/canvas-backgrounds.js`: cached procedural background artwork, used by Canvas 2D and a Three.js background texture.
 - `src/discovery-contract.js`: provider-independent search planning, counts and strict filters.
 - `src/import-jobs.js`: resumable, phase-based import work, one automatic attempt per stage and independent per-paper results.
+- `src/durable-storage.js`: disk-backed desktop state with a quota-tolerant browser cache. Large project snapshots remain readable through the bridge even when they exceed localStorage capacity; unrelated storage retains normal browser semantics.
+- `scripts/pdf-assets.js`: bundles and serves local PDF character maps, standard fonts, decoder resources and their notices. No remote font/CDN request is required for conversion.
 - `desktop/institution.mjs`: isolated persistent institution browser session, real sign-in windows, authenticated acquisition and PDF inbox. Remote websites have neither Node nor application IPC access.
 - `src/message-markdown.js`: Markdown rendering with an explicit safe HTML allowlist; executable content, embedded media and unsafe links are removed.
 - `src/paper-analysis.js`: original-grounded summaries and classifications, with individual relationship-evidence validation.
@@ -42,7 +44,9 @@ The shared retrieval/download core is described in [scansci-integration.md](scan
 
 Discovery: conditions and target count → configured model / Agent plans queries → local service retrieves real scholarly records → strict filtering / deduplication → source-ranked results without a second model call → user confirms → metadata enrichment → lawful PDF download → disk save → PDF.js text extraction → Markdown save → node original-file binding → source-backed citation edges between imported nodes. No model-native search tool is required.
 
-After confirmation, the batch passes through acquisition, conversion and analysis in that order. A local file import saves original bytes before conversion. All available batch Markdown is ready before the analysis phase compares related papers. The progress control names the current phase and its own denominator; the history keeps all three progress totals visible.
+For a new batch, originals are saved before conversion, and available Markdown is prepared before analysis compares related papers. On resume, already-converted items are analyzed first, so broken PDFs cannot block hundreds of ready documents. A successful stage flushes the workspace, project snapshot and history before starting another stage. Per-project disk writes are serialized to prevent overlapping conversion workers from overwriting a newer snapshot with an older one. Switching model providers changes the next model invocation, not the durable acquisition/conversion state. The progress control names the current phase and denominator; history retains all three totals while folded.
+
+Redraw canvas sets `importCanvasHidden` only on incomplete nodes belonging to that history job. Visibility and layout exclude those nodes without deleting durable records or graph edges. Continue clears the flag for the same job. Collapsed history does not construct thousands of hidden detail rows. `tests/desktop-large-import.mjs` exercises a synthetic 1,519-node workspace larger than the browser cache quota, redraw, restart, Continue and pause without real model calls or user files.
 
 ```mermaid
 flowchart LR

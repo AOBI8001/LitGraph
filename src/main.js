@@ -26,7 +26,7 @@ import { researchMessages } from './research-agent.js';
 import { ResearchRequest, formatResearchDuration } from './research-request.js';
 import { externalState, refreshExternal, externalInstructions, externalCompletion, localRequest, copyTextToClipboard } from './external-agent.js';
 import { extractFile, saveFulltext, saveOriginalFile, prepareEvidence, imageAttachment, withImages, originalBlob, getFulltext } from './fulltext.js';
-import { HISTORY_KEY, restoreJobs, createImportJob, jobCounts, moveTab, processImportItem, processImportBatch } from './import-jobs.js';
+import { HISTORY_KEY, restoreJobs, createImportJob, jobCounts, moveTab, processImportItem, processImportBatch, setImportCanvasVisibility } from './import-jobs.js';
 import { paperAnalysisMessages, validatePaperAnalysis } from './paper-analysis.js';
 import { shouldRefreshLocalMetadata } from './local-metadata.js';
 import { messageMarkdown } from './message-markdown.js';
@@ -40,7 +40,7 @@ import { captureStaticUI } from './static-ui-language.js';
 import { localizedError } from './ui-errors.js';
 import { mountModelRotation } from './model-rotation.js';
 import { summaryForLanguage, summaryTranslationMessages } from './summary-language.js';
-import { desktop, desktopBootstrap, modelFetch, recordUse } from './desktop-bridge.js';
+import { desktop, desktopBootstrap, modelFetch, recordUse, workspaceSnapshot, flushDesktopState } from './desktop-bridge.js';
 
 const RELATION_LABELS = { support: '支持', oppose: '反对', related: '相关' };
 const EDGE_PALETTES = {
@@ -710,6 +710,7 @@ function theoryById(id) {
 }
 
 function isNodeVisible(node) {
+  if (node.importCanvasHidden) return false;
   if (!enabledTheories.has(node.primaryTheory)) return false;
   if (filterState.yearStart && Number(node.year) < Number(filterState.yearStart)) return false;
   if (filterState.yearEnd && Number(node.year) > Number(filterState.yearEnd)) return false;
@@ -790,7 +791,7 @@ function vectorTokens(value = '') {
 }
 
 function buildVectorLinks() {
-  const docs = nodes.map((node) => ({ node, tokens: vectorTokens(`${node.title} ${node.title} ${node.abstract || ''}`) }));
+  const docs = nodes.filter(node=>!node.importCanvasHidden).map((node) => ({ node, tokens: vectorTokens(`${node.title} ${node.title} ${node.abstract || ''}`) }));
   const frequency = new Map();
   docs.forEach((doc) => new Set(doc.tokens).forEach((token) => frequency.set(token, (frequency.get(token) || 0) + 1)));
   docs.forEach((doc) => {
@@ -3820,16 +3821,30 @@ function historyMarkup() {
   return `<section class="discovery-history" aria-label="${panelText('检索与处理历史','Search and processing history')}"><div class="history-heading"><h3>${panelText('检索与处理历史','Search and processing history')}</h3><span>${panelText('按阶段保存，继续时跳过已完成步骤','Stages are saved; resume skips completed work')}</span></div>${jobs.length?jobs.map(job=>{
     const count=jobCounts(job),pages=job.items.find(i=>i.stage==='converting')?.pages;
     const open=expandedHistoryJobs.has(job.id);
+    const detailItems=open?job.items:[];
     const title=job.kind==='local'?panelText(`本地文件导入（${job.found} 篇）`,`Local file import (${job.found})`):job.query;
     return `<article class="discovery-history-row">
-      <div class="history-summary"><span class="history-summary-copy"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(new Date(job.createdAt).toLocaleString(language==='en'?'en-GB':'zh-CN'))}</small></span><div class="history-summary-actions"><button type="button" data-history-delete="${escapeHtml(job.id)}" title="${panelText('仅删除记录，保留论文和文件；正在进行的处理不受影响。','Delete this record only; papers, files and ongoing processing are retained.')}">${panelText('删除该记录','Delete record')}</button><button type="button" data-history-resume="${escapeHtml(job.id)}" ${!count.total || count.completed===count.total || discoverySearching || discoveryImporting && job.id!==activeDiscoveryJobId?'disabled':''}>${count.total && count.completed===count.total?panelText('完成','Complete'):discoveryImporting && job.id===activeDiscoveryJobId?panelText('暂停','Pause'):panelText('继续','Continue')}</button><button type="button" data-history-expand="${escapeHtml(job.id)}" aria-expanded="${open}">${open?panelText('收起','Collapse'):panelText('展开','Expand')}</button></div><span class="history-state">${escapeHtml(status[job.status]||job.status)}</span></div>
+      <div class="history-summary"><span class="history-summary-copy"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(new Date(job.createdAt).toLocaleString(language==='en'?'en-GB':'zh-CN'))}</small></span><div class="history-summary-actions"><button type="button" data-history-delete="${escapeHtml(job.id)}" title="${panelText('仅删除记录，保留论文和文件；正在进行的处理不受影响。','Delete this record only; papers, files and ongoing processing are retained.')}">${panelText('删除该记录','Delete record')}</button><button type="button" data-history-resume="${escapeHtml(job.id)}" ${!count.total || count.completed===count.total || discoverySearching || discoveryImporting && job.id!==activeDiscoveryJobId?'disabled':''}>${count.total && count.completed===count.total?panelText('完成','Complete'):discoveryImporting && job.id===activeDiscoveryJobId?panelText('暂停','Pause'):panelText('继续','Continue')}</button><button type="button" data-history-redraw="${escapeHtml(job.id)}" ${!count.total||discoverySearching||discoveryImporting?'disabled':''} title="${panelText('隐藏本次导入中未分析的节点，保留文件和记录；继续处理时恢复。','Hide unanalyzed nodes from this import, retaining files and history. Continue restores them.')}">${panelText('重新绘制画布','Redraw canvas')}</button><button type="button" data-history-expand="${escapeHtml(job.id)}" aria-expanded="${open}">${open?panelText('收起','Collapse'):panelText('展开','Expand')}</button></div><span class="history-state">${escapeHtml(status[job.status]||job.status)}</span></div>
       <div class="history-row-progress">${meter(panelText('原文获取','Originals'),count.downloaded,count.total)}${meter(panelText('MD 转换','Markdown'),count.converted,count.downloaded)}${meter(panelText('分析','Analysis'),count.analyzed,count.converted)}</div>
       <div class="history-details" ${open?'':'hidden'}>${job.notice?`<p class="history-report">${escapeHtml(job.items.length?importJobReport(job):localizedError(job.notice,language))}</p>`:''}${pages?`<small>${panelText(`当前 PDF：${pages.done}/${pages.total} 页`,`Current PDF: ${pages.done}/${pages.total} pages`)}</small>`:''}${job.error?`<small class="history-error">${escapeHtml(localizedError(job.error,language))}</small>`:''}
-      ${job.items.map(i=>`<div class="history-paper-row"><span>${escapeHtml(i.title)}</span><small>${i.error?escapeHtml(localizedError(i.error,language)):i.stage==='done'?panelText('已完成','Complete'):panelText('处理中或待处理','Processing or pending')}</small>${i.rejectedRelationships?`<small>${escapeHtml(relationshipWarningText(i))}</small>`:''}${i.error?`<em>${panelText(`${i.downloaded?'原文已保留':'原文未获取，已跳过'}${i.converted?' · MD 已保留':''} · 可稍后继续`,`${i.downloaded?'Original retained':'Original unavailable; skipped'}${i.converted?' · MD retained':''} · Continue when ready`)}</em>`:''}${!i.downloaded&&job.projectId===currentProjectId?`<button type="button" class="institution-open-button" data-history-institution="${escapeHtml(i.nodeId)}">${panelText('通过机构获取','Get through institution')}</button>`:''}</div>`).join('')}
+      ${detailItems.map(i=>`<div class="history-paper-row"><span>${escapeHtml(i.title)}</span><small>${i.error?escapeHtml(localizedError(i.error,language)):i.stage==='done'?panelText('已完成','Complete'):panelText('处理中或待处理','Processing or pending')}</small>${i.rejectedRelationships?`<small>${escapeHtml(relationshipWarningText(i))}</small>`:''}${i.error?`<em>${panelText(`${i.downloaded?'原文已保留':'原文未获取，已跳过'}${i.converted?' · MD 已保留':''} · 可稍后继续`,`${i.downloaded?'Original retained':'Original unavailable; skipped'}${i.converted?' · MD retained':''} · Continue when ready`)}</em>`:''}${!i.downloaded&&job.projectId===currentProjectId?`<button type="button" class="institution-open-button" data-history-institution="${escapeHtml(i.nodeId)}">${panelText('通过机构获取','Get through institution')}</button>`:''}</div>`).join('')}
       ${job.results?.length?`<div class="history-row-actions"><button type="button" data-history-results="${escapeHtml(job.id)}" ${discoveryImporting||discoverySearching?'disabled':''}>${panelText('查看结果','View results')}</button></div>`:''}</div></article>`;
   }).join(''):`<p class="history-empty">${panelText('开始检索后，这里会自动记录每次检索及原文处理进度。','Each search and its original-processing progress will appear here.')}</p>`}</section>`;
 }
 function bindHistoryActions(host, rerender) {
+  host.querySelectorAll('[data-history-redraw]').forEach(button=>button.addEventListener('click',async()=>{
+    if(discoveryImporting || discoverySearching)return;
+    const job=discoveryHistory.find(j=>j.id===button.dataset.historyRedraw&&j.projectId===currentProjectId);
+    if(!job)return;
+    setImportCanvasVisibility(nodes,job,true);
+    for(const node of nodes)if(node.importCanvasHidden)selectedNodes.delete(node.id);
+    if(selectedNode?.importCanvasHidden)selectedNode=null;
+    rebuildProcessedGraph();saveCurrentProject();renderOverview();renderOverviewState();render();
+    try {flushDesktopState();await localRequest('project',{projectId:currentProjectId,project:cleanProjectForExport()});}
+    catch(error){toast(localizedError(error,language));return;}
+    rerender();
+    toast(panelText('画布已重绘；本次导入中未分析的节点已隐藏。文件和记录保留，点击继续即可恢复。','Canvas rebuilt. Unanalyzed nodes from this import are hidden; files and history are retained. Continue restores them.'));
+  }));
   host.querySelectorAll('[data-history-delete]').forEach(button=>button.addEventListener('click',()=>{
     const id=button.dataset.historyDelete;
     const job=discoveryHistory.find(j=>j.id===id&&j.projectId===currentProjectId);
@@ -4273,6 +4288,9 @@ function importJobReport(job) {
 const activePaperTasks = new Map();
 async function runImportJob(job, onlyNodeId = null) {
   if (discoveryImporting || discoverySearching || job.projectId !== currentProjectId) return;
+  setImportCanvasVisibility(nodes,job,false);
+  saveCurrentProject();
+  configureSimulation(false);renderOverviewState();render();
   activeDiscoveryJobId = job.id;
   discoveryImporting = true;
   discoveryController = new AbortController();
@@ -4293,6 +4311,14 @@ async function runImportJob(job, onlyNodeId = null) {
       activePaperTasks.set(node.id, paperController);
       const signal=AbortSignal.any([jobSignal,paperController.signal]);
       try { await processImportItem(item, {
+        checkpoint: async () => {
+          // Save each completed stage before starting another provider request.
+          // Desktop storage is quota-independent; the explicit project file is
+          // also usable for recovery when a browser session itself is lost.
+          flushDesktopState();
+          await localRequest('project',{projectId:job.projectId,project:cleanProjectForExport()});
+          await historyWrite;
+        },
         save: () => {
           if (['downloading','converting','analyzing'].includes(item.stage)) job.phase = item.stage;
           const count = jobCounts(job);
@@ -5061,11 +5087,11 @@ async function resetUserSettings() {
   try {
     saveCurrentProject();await historyWrite;
     await localRequest('disconnect',{});
-    const snapshot=Object.fromEntries(Object.keys(localStorage).map(key=>[key,localStorage.getItem(key)]));
+    const snapshot=workspaceSnapshot();
     if(desktop)await desktop.resetSettings(snapshot);
     for(const key of preferenceKeys)localStorage.removeItem(key);
     aiConfig=null;
-    if(desktop&&!desktop.saveState(Object.fromEntries(Object.keys(localStorage).map(key=>[key,localStorage.getItem(key)]))))throw Error(panelText('设置未能保存，请重试。','Settings could not be saved. Retry.'));
+    flushDesktopState();
     location.reload();
   }catch(error){blocker.remove();changingSettings=false;toast(localizedError(error,language));}
 }

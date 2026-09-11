@@ -10,9 +10,9 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.2.0 · Windows 10 / 11 x64 · MIT licensed**
+**1.2.1 · Windows 10 / 11 x64 · MIT licensed**
 
-> This page describes the 1.2.0 source. Downloadable installer versions are listed in Releases.
+> This page describes the 1.2.1 source. Downloadable installer versions are listed in Releases.
 
 [Download](https://github.com/AOBI8001/LitGraph/releases/latest) · [Website](https://litgraph.aobi.qzz.io/) · [Feedback](https://github.com/AOBI8001/LitGraph/issues)
 
@@ -159,6 +159,10 @@ For each selected paper, the application performs the available steps:
 6. Generate a summary, subject classification, and support/opposition/related edges grounded in both supplied original texts, then update the canvas.
 
 A failed acquisition preserves the bibliographic record and its status while other papers continue. Pause and resume unfinished stages without redownloading saved PDFs or reconverting saved Markdown. Editing filters preserves current results; Start search creates a new search. The history button tracks acquisition, Markdown conversion and analysis separately, including after a restart. Convert locally and analyze in the paper details retries one paper independently.
+
+**Large imports and resuming (1.2.1):** Pause, change API or external Agent configuration, then Continue. Disk records are reconciled first; existing Markdown is analyzed before retrying pending conversions. Each successful stage is saved separately. Desktop workspace persistence is no longer limited by Chromium's approximately 5 MB localStorage cache quota. Memory, disk and model-context limits still apply.
+
+**Redraw canvas**, between Continue and Expand in history, recalculates the layout and hides unanalyzed gray nodes from that import. It does not delete papers, PDF/Markdown files, analyses or history. Continue restores those nodes. Collapsed history retains all three progress bars and creates per-paper detail rows only when expanded. PDF conversion now ships local character maps and font resources; scans and damaged encodings may still need OCR or replacement source text. Unreliable extraction is not silently treated as success.
 
 Original opens in the default Windows application, with the system application picker when no association exists. LitGraph does not embed a PDF reader. Obtain restricted originals through an authorized institutional route and add them afterward. Unrestricted-language searches prioritize English, supplementing other languages when English sources are insufficient.
 
