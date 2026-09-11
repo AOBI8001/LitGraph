@@ -20,8 +20,8 @@ See the relationships in the graph. Investigate them in conversation. Your paper
 
 ## 📍 Contents
 
-- [Product tour](#product-tour)
 - [Download and get started](#-download-and-get-started)
+- [Product tour](#product-tour)
 - [From a research question to a paper collection](#-from-a-research-question-to-a-paper-collection)
 - [Explore the structure of the literature](#-explore-the-structure-of-the-literature)
 - [Research conversations grounded in source text](#-research-conversations-grounded-in-source-text)
@@ -30,42 +30,6 @@ See the relationships in the graph. Investigate them in conversation. Your paper
 - [Data and privacy](#-data-and-privacy)
 - [Frequently asked questions](#-frequently-asked-questions)
 - [Documentation and open-source collaboration](#-documentation-and-open-source-collaboration)
-
-## Product tour
-
-Screenshots show graph exploration, discovery, and source-grounded research workflows. Answers depend on the project’s source texts, retrieved evidence, and connected model.
-
-### 2D theory clustering
-
-<img src="docs/images/2d-theory.png" alt="2D theory clustering" width="1000">
-
-### 2D semantic vectors
-
-<img src="docs/images/2d-semantic.png" alt="2D semantic vectors" width="1000">
-
-### 3D theory clustering
-
-<img src="docs/images/3d-theory.png" alt="3D theory clustering" width="1000">
-
-### 2D year tree
-
-<img src="docs/images/year-tree.png" alt="2D year tree" width="600">
-
-### Literature discovery: search and confirmation
-
-<img src="docs/images/discovery.png" alt="Literature discovery: search and confirmation" width="1000">
-
-### Research Space: factual retrieval across papers
-
-<img src="docs/images/research-facts.png" alt="Research Space: factual retrieval across papers" width="1000">
-
-### Research Space: comparing selected papers
-
-<img src="docs/images/research-comparison.png" alt="Research Space: comparing selected papers" width="1000">
-
-### Paper and relationship data table
-
-<img src="docs/images/data-table.png" alt="Paper and relationship data table" width="1000">
 
 ## 📦 Download and get started
 
@@ -102,6 +66,53 @@ Load the sample to learn the graph, then create your own project. It contains 50
 6. **Follow the questions:** Continue with specific follow-ups and return to the saved project as your research develops.
 
 The project menu supports creation, switching, renaming, and deletion. Project JSON supports graph-data exchange; transferring a complete research collection also requires its associated originals and indexes.
+
+## Product tour
+
+Eight actual interfaces show the workflow from graph exploration to source-grounded questions. Click an image to view the original; answers depend on project sources, retrieved evidence and the connected model.
+
+<table>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <p><strong>2D theory clusters</strong></p>
+      <a href="docs/images/2d-theory.png"><img src="docs/images/2d-theory.png" alt="2D theory clusters" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <p><strong>2D semantic layout</strong></p>
+      <a href="docs/images/2d-semantic.png"><img src="docs/images/2d-semantic.png" alt="2D semantic layout" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <p><strong>3D theory clusters</strong></p>
+      <a href="docs/images/3d-theory.png"><img src="docs/images/3d-theory.png" alt="3D theory clusters" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <p><strong>2D timeline</strong></p>
+      <a href="docs/images/year-tree.png"><img src="docs/images/year-tree.png" alt="2D timeline" width="220"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <p><strong>Literature discovery: search and confirmation</strong></p>
+      <a href="docs/images/discovery.png"><img src="docs/images/discovery.png" alt="Literature discovery: search and confirmation" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <p><strong>Research space: project-wide factual retrieval</strong></p>
+      <a href="docs/images/research-facts.png"><img src="docs/images/research-facts.png" alt="Research space: project-wide factual retrieval" width="100%"></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center" valign="top">
+      <p><strong>Research space: selected-paper comparison</strong></p>
+      <a href="docs/images/research-comparison.png"><img src="docs/images/research-comparison.png" alt="Research space: selected-paper comparison" width="100%"></a>
+    </td>
+    <td width="50%" align="center" valign="top">
+      <p><strong>Paper and relationship data table</strong></p>
+      <a href="docs/images/data-table.png"><img src="docs/images/data-table.png" alt="Paper and relationship data table" width="100%"></a>
+    </td>
+  </tr>
+</table>
 
 ## 🔍 From a research question to a paper collection
 
@@ -226,7 +237,7 @@ For example:
 
 The application prioritizes indexed originals, retrieves relevant passages, and sends them to the model with per-paper coverage information. Answers are instructed to follow that evidence. Further AI deductions must be marked `[AI inference]`, or `【AI 推断】` in Chinese.
 
-Ask for sources whenever you want to inspect the basis of an answer. The model may use only supplied evidence identifiers and available source locations. Missing full text, extraction problems, and conflicting evidence should be described specifically.
+Factual answers are instructed to cite retrieved evidence IDs, linked to available sections, PDF pages or Markdown lines for source checking. Missing full text, extraction problems and conflicting evidence should be described specifically.
 
 Selecting all papers sets the retrieval scope; each request still has a finite context budget. Relevant excerpts and coverage information distinguish the evidence supplied for this answer from material that remains unverified.
 
@@ -281,36 +292,146 @@ Manual MCP is a separate compatibility path: LitGraph prepares questions, eviden
 | `litgraph_submit_result` | Return the corresponding result |
 | `litgraph_disconnect` | End the connection |
 
-Search planning, candidate assessment, and research answers each have their own output contract. Connection status reflects recent handshake and tool activity; the Agent must continue claiming tasks to answer new requests. See the [shared Agent guide](docs/LITGRAPH_AGENT_GUIDE.md) for the complete agreement.
+Search planning, source-paper analysis, and research answers each have their own output contract. Connection status reflects recent handshake and tool activity; the Agent must continue claiming tasks to answer new requests. See the [shared Agent guide](docs/LITGRAPH_AGENT_GUIDE.md) for the complete agreement.
 
 <a name="algorithms"></a>
 
 ## ⚙️ RAG, layout algorithms, and optimizations
 
-### Research RAG: Retrieve within a defined paper scope
+### Source-grounded research: A scoped, multi-stage hybrid RAG engine
 
-Research space uses **retrieval-augmented generation (RAG)**: a model generates multiple queries and high-/low-level keywords, then local BM25 and multilingual dense retrieval supply merged, reranked evidence from the selected papers.
+LitGraph organizes research questions into **document indexing → query planning → hybrid retrieval → evidence reranking → context assembly → grounded generation**. The retrieval unit is a locatable source passage; the active research tab determines the paper scope. Questions, relevant passages and necessary metadata form the model input.
+
+The pipeline supports factual lookup within a paper, comparison across selected studies, and topic exploration across a project. **Document processing, embedding and evidence retrieval run locally. The connected model supplies query planning when needed and the final answer.** API and external Agent connections share the research-answer contract.
 
 ```mermaid
-flowchart LR
-    accTitle: LitGraph research evidence workflow
-    accDescr: A request captures its paper scope, retrieves and ranks source passages, allocates evidence context, then generates and validates an answer with follow-up questions.
-    paper_scope[Capture the paper scope] --> source_text[Load text and coverage]
-    source_text --> rank_chunks[Paragraph chunks and hybrid multi-query retrieval]
-    rank_chunks --> evidence_budget[Rerank and allocate target-paper evidence]
-    evidence_budget --> generate_answer[Generate answer and follow-ups]
-    generate_answer --> validate_result[Validate structure and evidence IDs]
+flowchart TB
+    accTitle: LitGraph source-grounded RAG architecture
+    accDescr: Source documents become paragraph chunks with provenance and cached local vectors. Scoped questions use adaptive planning, lexical and dense retrieval, rank fusion, reranking, context budgets and validated model responses.
+    subgraph index_layer["LOCAL INDEX"]
+        originals["PDF / Markdown originals"] --> chunks["Paragraph and section chunks<br/>Metadata · Pages · Lines"]
+        chunks --> vectors[("Local E5 vectors<br/>Versioned persistent cache")]
+    end
+    subgraph retrieval_layer["HYBRID RETRIEVAL"]
+        question["Research question<br/>Active paper scope"] --> planner["Adaptive query planning<br/>Original + Multi-query<br/>High / Low keywords"]
+        planner --> lexical["BM25 lexical retrieval"]
+        planner --> dense["E5 multilingual retrieval"]
+        chunks --> lexical
+        vectors --> dense
+        lexical --> fusion["Reciprocal rank fusion"]
+        dense --> fusion
+        fusion --> rerank["Feature reranking<br/>Relevance + Section match<br/>Noise penalties"]
+    end
+    subgraph answer_layer["GROUNDED ANSWERS"]
+        rerank --> context["Evidence budget<br/>Whole chunks · Target coverage<br/>Assign evidence IDs"]
+        context --> model["Connected API / Agent<br/>Answer + Inference labels<br/>Three follow-up questions"]
+        model --> validation["Validate output<br/>Evidence IDs · Source locations"]
+    end
+    classDef source fill:#f3f4f6,stroke:#6b7280,color:#111827
+    classDef retrieval fill:#ede9fe,stroke:#7c3aed,color:#3b0764
+    classDef evidence fill:#dbeafe,stroke:#2563eb,color:#1e3a5f
+    classDef output fill:#dcfce7,stroke:#16a34a,color:#14532d
+    class index_layer,retrieval_layer,answer_layer,originals,chunks,vectors source
+    class question,planner,lexical,dense,fusion,rerank retrieval
+    class context evidence
+    class model,validation output
 ```
 
-The implementation:
+### 1. Document modeling: Paragraph structure and source coordinates
 
-- Preserves paragraph, section and page boundaries, splitting long paragraphs at sentence boundaries near 1,400 characters. Each chunk carries paper metadata and source positions.
-- Combines rewritten queries, BM25 and local multilingual-e5-small dense vectors through RRF and feature reranking.
-- Uses development-selected top-k=20 with coverage for explicitly named comparison papers and complete chunks.
-- Uses evidence budgets of approximately 28,000 / 42,000 characters for Quick / Expert, alongside a bounded recent conversation.
-- Requires an answer and three follow-ups, asks for factual evidence IDs, validates supplied IDs and displays actual PDF file pages / Markdown line locations.
+Chunking follows Markdown headings, natural paragraphs and PDF page boundaries. Long paragraphs split preferentially at sentence boundaries, falling back to line or word boundaries when necessary, with a cap near **1,400 characters**. This structure-aware approach preserves coherent passages while bounding their size. Section recognition covers abstracts, introductions, methods, results, discussions, limitations and conclusions.
 
-Dense inference runs in a separate local CPU worker with persistent caching. There is no external vector database or cross-encoder. See the [implementation and scaling boundaries](docs/RAG_AND_GRAPH.md) and [evaluation protocol](docs/RAG_BENCHMARK_V2.md).
+Each evidence chunk carries both searchable text and provenance:
+
+| Metadata layer | Stored fields | Purpose |
+| --- | --- | --- |
+| **Paper identity** | Document ID, title, authors, year, DOI | Associate passages with papers and support explicit targeting |
+| **Semantic structure** | Section category, current heading, passage text | Distinguish methods, results and discussion; supply ranking features |
+| **Source coordinates** | Source type, filename, Markdown path, PDF page, line and character ranges | Locate the answer's evidence in the original |
+| **Index version** | Content fingerprint, chunking version, chunk ID | Track changes and keep evidence versions separate |
+
+Page references use retained **physical PDF file pages**. Markdown lines provide a fallback when pages are unavailable; publisher-printed page numbers are never invented. Papers without readable full text may contribute explicitly labeled abstract evidence, with that limitation passed to the model.
+
+### 2. Query planning: Preserve intent and separate retrieval targets
+
+The original question always participates in retrieval. Model-planned requests use bounded recent user questions and the active paper scope to produce up to four supplementary queries, together with two keyword levels:
+
+- **High-level keywords:** themes, relationships and comparison axes, such as “reliability of inhibitory-control measurement.”
+- **Low-level keywords:** tasks, constructs, measures, populations or authors, such as “stop-signal task, SSRT, test–retest reliability.”
+- **Section preferences:** relevant section categories for questions about samples, designs or statistical findings.
+
+Planning preserves negation, temporal constraints, comparison targets, exact titles and DOIs, with cross-language expressions where useful. It produces retrieval cues rather than answers or guessed findings. Explicit title or DOI matches further restrict the candidate papers; query expansion does not expand the active paper scope.
+
+**Quick mode uses task-adaptive routing.** Short conceptual questions can use local bilingual vocabulary expansion, avoiding a remote planning call. Requests needing precise lookup, comparison or contextual disambiguation, and Expert requests, use model planning. Invalid plans fall back to the original question with a recorded degraded state.
+
+### 3. Hybrid retrieval and reranking: Exact terminology meets semantic matching
+
+Two complementary paths retrieve chunks within the active scope:
+
+| Stage | Current implementation | Purpose |
+| --- | --- | --- |
+| **Sparse retrieval** | BM25 with `k1=1.2, b=0.75` | Preserve exact task names, abbreviations and term matches |
+| **Dense retrieval** | Local `multilingual-e5-small`, 384-dimensional normalized vectors, cosine similarity | Capture semantic proximity and multilingual expressions |
+| **Rank fusion** | Top 60 candidates per query/ranking, RRF with a smoothing constant of 60 | Combine rankings with different score scales |
+| **Feature reranking** | Fused, lexical and dense scores plus section features | Prioritize passages suited to the current question |
+
+E5 runs with quantized weights on the local CPU. Queries and passages use the required `query:` and `passage:` prefixes, followed by mean pooling and L2 normalization. Encoding is capped at 512 tokens; chunk character limits and encoder token limits are separate controls.
+
+RRF combines ranks rather than adding raw retrieval scores: each ranking contributes `1 / (60 + rank)`. The lightweight reranker starts with **45% normalized fusion score + 35% lexical score + 20% best dense similarity**, adds a requested-section bonus, and penalizes reference sections and very short passages. These engineering weights are ranking signals, not probabilities of answer correctness.
+
+Reranking currently uses this interpretable feature combination; a cross-encoder is not integrated. If dense retrieval is unavailable, lexical retrieval remains available with diagnostics identifying the fallback.
+
+### 4. Evidence assembly: Coverage, completeness and budgets
+
+Fused candidates are deduplicated by chunk ID and selected as **complete passage chunks**, without truncating selected evidence to fill a budget. For explicitly named comparison papers, evidence slots are allocated across targets before remaining capacity is filled by ranked candidates, reducing domination by one paper.
+
+| Request path | Maximum chunks | Source-text budget |
+| --- | ---: | ---: |
+| Quick · Local expansion · Single paper | 6 | 8,000 characters |
+| Quick · Local expansion · Multiple papers | 10 | 12,000 characters |
+| Quick · Model planning | 20 | 28,000 characters |
+| Expert · Model planning | 20 | 42,000 characters |
+
+Budgets cover evidence text, not the complete request's token count. Required metadata, instructions and bounded conversation history also enter the request. Actual evidence volume depends on passage length, source availability and relevance.
+
+The model-planned default of `top-k=20` follows a development comparison on the current sample corpus: across 12 development questions and 16 target evidence locations, `k=8/12` retrieved 15 locations, while `k=20` retrieved 16. Increasing to 32/48 added no target-evidence recall. The smaller setting reaching that development coverage was chosen to contain context cost. This is a parameter-selection result, not a guarantee for other corpora.
+
+### 5. Grounded generation: A shared contract and traceable sources
+
+API and external Agent connections receive the same scope, evidence package and output constraints. Selected chunks obtain request-local IDs such as `E1, E2…`. Paper metadata is supplied per document rather than repeatedly duplicating titles and abstracts inside every passage.
+
+The generation contract requires:
+
+1. Factual claims to cite supplied evidence IDs, with separate support for each paper in a comparison.
+2. A distinction between a paper's own findings and prior work it discusses; additional deductions use `[AI inference]` / `【AI 推断】`.
+3. Explicit limitations for missing text, extraction quality, conflicting evidence and incomplete coverage.
+4. Source documents, attachments and historical text to be treated as data rather than system instructions.
+5. A structured result containing a Markdown answer and three concrete follow-up questions, in the question's language.
+
+Before display, output structure and evidence IDs are checked, references to unknown IDs are rejected, and actual sections, pages and line locations are attached. **ID validation makes citations locatable; whether a claim is fully supported still requires reading its source.** All papers defines the candidate scope, not a promise that every full text fits in one request. Coverage information is explicitly provided to the model.
+
+### 6. Performance engineering: Reuse computation and shorten remote work
+
+| Layer | Implemented strategy | Main benefit |
+| --- | --- | --- |
+| **Query routing** | Local expansion for short Quick questions; planning calls for more demanding requests | Shorter remote-call chains for common questions |
+| **Query-plan cache** | Bounded in-memory cache keyed by model identity, question, recent context and paper scope | Reuse plans under the same conditions |
+| **Embedding inference** | Quantized local E5, background CPU Worker, model-instance reuse, batches of eight | Keep encoding off the UI thread and reduce repeated initialization |
+| **Vector cache** | Memory, disk and bundled sample-vector reuse; model-version, input and dimension checks | Encode cache misses instead of repeatedly processing unchanged text |
+| **Input deduplication** | Merge identical encoding inputs within a batch; deduplicate evidence by chunk ID | Avoid repeated encoding and context |
+| **Context compression** | Complete-chunk budgets, deduplicated metadata, bounded recent history | Control request size and leave room for the answer |
+| **Request lifecycle** | Pause/cancel, scope snapshots, late-result isolation | Keep older requests from overwriting newer conversations |
+| **Stage diagnostics** | Queries, candidate counts, retrieval timing, evidence volume and fallback states | Separate document preparation, retrieval and generation costs |
+
+Caches reuse plans or vectors; evidence is selected for the current question. End-to-end latency also includes model startup, time to first output, answer length, network conditions and account limits. Local retrieval optimization alone cannot guarantee a fixed response time. See [research latency and the Quick path](docs/RESEARCH_LATENCY.md).
+
+### 7. Incremental updates, evaluation and scaling boundaries
+
+Saving a new paper as Markdown creates versioned evidence chunks with source positions. Subsequent retrieval encodes only uncached text. Editing a source changes the relevant chunk identities, while unchanged encoding inputs can reuse existing vectors. New requests prepare candidates from the current project scope; retained disk vectors do not bring removed papers back into an answer.
+
+Evaluation separates **target-evidence recall, factual answer correctness, source locations and refusal boundaries**. The current regression protocol uses 49 distinct papers from the sample project, with 49 single-paper factual questions, 20 cross-paper comparisons, and duplicate-record and unanswerable controls. It supports implementation regression checks; independent-corpus generalization, human review and new questions remain important. See the [research RAG evaluation protocol](docs/RAG_BENCHMARK_V2.md).
+
+Dense similarity currently scans scoped candidates, and lexical statistics are computed for the current candidate set. Disk-backed inverted indexes, approximate-nearest-neighbor retrieval and hierarchical graph exploration are further scaling directions, not shipped large-corpus capabilities. See [RAG and graph implementation](docs/RAG_AND_GRAPH.md) for architectural details and boundaries.
 
 ### Graph algorithms: Theories and text similarity
 
