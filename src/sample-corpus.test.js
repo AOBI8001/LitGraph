@@ -1,0 +1,52 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { sampleEntry, withSampleCorpus, loadSampleDocument, refreshSampleNodes } from './sample-corpus.js';
+import { selectEvidence } from './research-evidence.js';
+import { researchMessages } from './research-agent.js';
+const markdown = '# Paper\n\n## PDF Page 2\n\nParticipants performed a stopping task. The original reported 120 trials.';
+const node = { id: 'paper-001', isSample: true, title: 'Paper', doi: '10.1/test', hasPdf: false, pdfUrl: '', abstract: 'Abstract lacking methods.' };
+const entry = {id: node.id, canonicalId: node.id, title: node.title, doi: node.doi, file: 'paper-001.md', sourceKind: 'pdf_text', pageCount: 1, sha256: createHash('sha256').update(markdown).digest('hex')};
+const catalog = { schemaVersion: 1, documents: [entry] };
+const read = async file => file === 'index.json' ? JSON.stringify(catalog) : markdown;
+test('MD is attached without asserting PDF availability', () => {
+  const project = withSampleCorpus({meta: {}, nodes: [node]}, catalog);
+  assert.equal(project.meta.fullTextCount, 1);
+  assert.equal(project.nodes[0].fulltextStatus, 'bundled_markdown');
+  assert.equal(project.nodes[0].hasPdf, false);
+  assert.equal(project.nodes[0].pdfUrl, '');
+  assert.equal(node.sampleMarkdown, undefined);
+  assert.equal(withSampleCorpus({meta: {}, nodes: [node]}, null).meta.fullTextCount, 0);
+});
+test('identity, safe file names and hash are checked before using original text', async () => {
+  assert.equal(sampleEntry({...node, isSample: false}, catalog), null);
+  assert.equal(sampleEntry({...node, title: 'Unrelated paper'}, catalog), null);
+  assert.equal(sampleEntry({...node, doi: '10.1/other'}, catalog), null);
+  assert.equal(sampleEntry(node, {...catalog, documents: [{...entry, file: '../private.md'}]}), null);
+  await assert.rejects(loadSampleDocument(node, async file => file === 'index.json' ? JSON.stringify(catalog) : 'tampered'));
+  assert.equal(await loadSampleDocument(node, async () => null), null);
+  await assert.rejects(loadSampleDocument(node, async file => file === 'index.json' ? JSON.stringify(catalog) : null));
+  await assert.rejects(loadSampleDocument({...node, title: 'Wrong paper'}, read), /identity/);
+});
+test('existing sample gains text availability without losing user state or replacing originals', () => {
+  const template = withSampleCorpus({meta: {}, nodes: [node]}, catalog);
+  const existing = {nodes: [{...node, read: true, notes: 'Keep me', x: 42, fulltextKey: 'user-file', fulltextStatus: 'indexed'}]};
+  const refreshed = refreshSampleNodes(existing, template);
+  assert.ok(refreshed.nodes[0].sampleMarkdown);
+  assert.equal(refreshed.nodes[0].notes, 'Keep me');
+  assert.equal(refreshed.nodes[0].read, true);
+  assert.equal(refreshed.nodes[0].x, 42);
+  assert.equal(refreshed.nodes[0].fulltextKey, 'user-file');
+  assert.equal(refreshed.nodes[0].fulltextStatus, 'indexed');
+  assert.equal(existing.nodes[0].sampleMarkdown, undefined);
+});
+test('Research Space sends MD evidence through the same API/Agent prompt, not the abstract', async () => {
+  const document = await loadSampleDocument(node, read);
+  const evidence = selectEvidence([{node, document}], 'How many trials?');
+  assert.equal(evidence[0].sourceKind, 'pdf_text');
+  assert.match(evidence.map(e => e.text).join('\n'), /120 trials/);
+  const messages = researchMessages([node], [], 'How many trials?', {evidence, coverage: []});
+  assert.match(JSON.stringify(messages), /120 trials/);
+  assert.doesNotMatch(JSON.stringify(messages), /Abstract lacking methods/);
+  assert.equal(document.originalPath, undefined);
+});

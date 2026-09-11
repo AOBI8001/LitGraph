@@ -4,6 +4,9 @@ import path from 'node:path';
 import {scholarlyService} from './scholarly-service.js';
 import {scansciService} from './scansci-service.js';
 import {isCompletePdf} from './acquisition-core.js';
+import {loadSampleDocument} from '../src/sample-corpus.js';
+import {chunkDocument,CHUNK_VERSION} from '../src/research-evidence.js';
+import {createVectorService} from './rag-vector-service.mjs';
 import {cleanDoi,titleKey,discoveryCount,rankDiscovery,mergeDiscovery,usesInstitution,topicMatch} from '../src/discovery-contract.js';
 
 const digest = value => createHash('sha256').update(String(value)).digest('hex');
@@ -95,6 +98,7 @@ function institutionFilterReason(paper,filters){
 }
 export function localService(root, dependencies = {}) {
   const dataRoot = dependencies.dataRoot || root;
+  const embed=dependencies.embed || createVectorService(root,dataRoot);
   const scholarly=dependencies.scholarly||scholarlyService();
   const engine=dependencies.engine || scansciService(root,{scholarly,download:dependencies.download});
   const acquiringDocuments = new Set();
@@ -102,7 +106,7 @@ export function localService(root, dependencies = {}) {
   const clients = new Map();
   const legacyIndexRoot = path.join(dataRoot, 'projects', 'local-fulltext-index');
   const libraryRoot = path.join(dataRoot, 'data');
-  const folders = Object.fromEntries(['originals', 'markdown', 'analysis', 'vectors', 'projects', 'records'].map(name => [name, path.join(libraryRoot, name)]));
+  const folders = Object.fromEntries(['originals', 'markdown', 'chunks', 'analysis', 'vectors', 'projects', 'records'].map(name => [name, path.join(libraryRoot, name)]));
   let foldersReady;
   const ensureFolders = () => foldersReady ||= Promise.all(Object.values(folders).map(folder => mkdir(folder, { recursive: true })));
   const samplePath = path.join(dataRoot, 'projects', 'local-sample', 'graph.json');
@@ -123,6 +127,17 @@ export function localService(root, dependencies = {}) {
     catch (error) { if (error.code === 'ENOENT') return { nodes: [] }; throw error; }
   }
   async function sampleSource(node) {
+    if (node.isSample) {
+      // Same bundle used by the web preview and installed application. No author-machine paths.
+      for (const directory of [path.join(root, 'public', 'sample-fulltext'), path.join(root, 'dist', 'sample-fulltext')]) {
+        const bundled = await loadSampleDocument(node, file => readFile(path.join(directory, file), 'utf8').catch(error => {
+          if (error.code === 'ENOENT') return null;
+          throw error;
+        }));
+        if (bundled) return saveDocument({ ...bundled, key: digest(`sample-md:${bundled.corpusHash}`) });
+      }
+      return null;
+    }
     const sample = await readSample();
     const matches = sample.nodes.filter(p => node.doi && p.doi?.toLowerCase() === node.doi.toLowerCase());
     const found = sample.nodes.find(p => p.id === node.id && p.title === node.title) || (matches.length === 1 ? matches[0] : matches.find(p => p.title === node.title));
@@ -137,6 +152,9 @@ export function localService(root, dependencies = {}) {
   async function saveDocument(record) {
     await ensureFolders();
     if(record.markdown){record.localMarkdownPath = path.join(folders.markdown, record.key + '.md');record.markdownRelativePath=`data/markdown/${record.key}.md`;await atomicWrite(record.localMarkdownPath, record.markdown);}
+    const chunks=record.markdown?chunkDocument(record,{...record.metadata,...record.paperMetadata,id:record.nodeId||record.key}):[];
+    await atomicWrite(path.join(folders.chunks,record.key+'.json'),JSON.stringify({version:CHUNK_VERSION,key:record.key,chunks}));
+    record.chunkCount=chunks.length;record.chunkVersion=CHUNK_VERSION;
     await atomicWrite(path.join(folders.records, record.key + '.json'), JSON.stringify(record));
     return record;
   }
@@ -384,6 +402,7 @@ export function localService(root, dependencies = {}) {
       if (token !== c.browserToken) return send(403, { error: '不允许访问此接口' });
       c.lastBrowserSeen = Date.now();
       const controller=new AbortController();res.once('close',()=>{if(!res.writableEnded)controller.abort();});
+      if(url.pathname==='/__litgraph/embeddings'&&req.method==='POST')return send(200,{vectors:await embed(data.texts,data.kind,controller.signal)});
       if (url.pathname === '/__litgraph/data-folder' && req.method === 'POST') {
         await ensureFolders();
         // Make the current project's legacy originals visible in this folder
@@ -489,6 +508,7 @@ export function localService(root, dependencies = {}) {
           const key=documentKey(data);
           const previous=await readDocument(key);
           let record = { ...previous, key, projectId: data.projectId, nodeId: data.nodeId, markdown: data.markdown ? String(data.markdown) : previous?.markdown, fileName: String(data.fileName || 'source.md'), sourceKind: data.sourceKind || 'markdown',conversionQuality:data.conversionQuality||'text_extraction',pageCount:data.pageCount||null };
+          if(data.paperMetadata)record.paperMetadata={title:String(data.paperMetadata.title||'').slice(0,2000),authors:Array.isArray(data.paperMetadata.authors)?data.paperMetadata.authors.filter(x=>typeof x==='string').slice(0,200):[],year:data.paperMetadata.year,doi:String(data.paperMetadata.doi||'').slice(0,500)};
           if(data.replaceOriginal===true && data.originalData){delete record.markdown;delete record.markdownRelativePath;delete record.localMarkdownPath;delete record.metadata;}
           if(data.originalData)record=await saveOriginal(key,Buffer.from(data.originalData,'base64'),record);
           return send(200, await saveDocument(record));

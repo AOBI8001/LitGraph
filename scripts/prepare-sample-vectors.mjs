@@ -1,0 +1,18 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {gzipSync} from 'node:zlib';
+import {pipeline,env} from '@huggingface/transformers';
+import sample from '../src/public-sample.js';
+import {loadSampleDocument} from '../src/sample-corpus.js';
+import {makeCandidates,fingerprint} from '../src/research-evidence.js';
+import {createEmbedder,EMBEDDING_MODEL,EMBEDDING_REVISION} from '../src/research-embedding.js';
+env.allowRemoteModels=false;env.localModelPath=path.resolve('public/models')+'/';
+const cache=path.resolve('output/rag-vector-cache');await fs.mkdir(cache,{recursive:true});
+const embed=createEmbedder({load:()=>pipeline('feature-extraction',EMBEDDING_MODEL,{dtype:'q8',device:'cpu',session_options:{intraOpNumThreads:2}}),read:key=>fs.readFile(path.join(cache,key.replaceAll(':','_')+'.json'),'utf8').then(JSON.parse).catch(()=>null),write:(key,value)=>fs.writeFile(path.join(cache,key.replaceAll(':','_')+'.json'),JSON.stringify(value))});
+const documents=await Promise.all(sample.nodes.map(async node=>({node,document:await loadSampleDocument(node,file=>fs.readFile('public/sample-fulltext/'+file,'utf8'))})));
+const texts=[...new Set(makeCandidates(documents).map(c=>`${c.heading||''}\n${c.text}`))];
+const vectors=await embed(texts,'passage');
+const records=texts.map((text,i)=>{const input='passage: '+text,bytes=Buffer.alloc(384*4);vectors[i].forEach((value,j)=>bytes.writeFloatLE(value,j*4));return [EMBEDDING_REVISION+':mean:q8:'+fingerprint(input),input,bytes.toString('base64')];});
+const output=gzipSync(JSON.stringify({version:1,model:EMBEDDING_MODEL,revision:EMBEDDING_REVISION,dimension:384,records}));
+await fs.writeFile('public/sample-fulltext/vectors.e5.q8.json.gz',output);
+console.log(JSON.stringify({uniquePassages:texts.length,bytes:output.length}));

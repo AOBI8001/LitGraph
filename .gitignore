@@ -6,6 +6,8 @@ output/
 # Private libraries, full text, credentials and local process artifacts.
 projects/
 data/
+public/sample-fulltext/
+public/models/
 versions/
 .playwright-cli/
 .env

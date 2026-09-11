@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import {usageSummary} from '../cloudflare/metrics/summary.js';
 import {DatabaseSync} from 'node:sqlite';
 import {readFile} from 'node:fs/promises';
 import worker,{validateEvent,recordEvent,installHash,retentionCohorts,retentionQuery} from '../cloudflare/metrics/worker.js';
@@ -41,4 +42,23 @@ await recordEvent(db,repeated,'late');await recordEvent(db,{...repeated,day:'199
 assert.equal(sqlite.prepare('SELECT first_day FROM installations WHERE install_hash=?').get('late').first_day,'2020-03-01');
 assert.equal(stats.retention[0].day30.mature,false);
 console.log('Retention: exact day 1/7/30 core usage, cohort denominator, per-install deduplication, observation maturity and late offline events passed.');
+const summary=await usageSummary(db,'2020-01-08');
+assert.equal(summary.dau,1);
+assert.equal(summary.wau,2); // Same installation across several days counts once.
+assert.equal(summary.mau,2);
+assert.equal(summary.returningToday,1);
+assert.equal(summary.newInstalls30,3);
+assert.equal(summary.activationRate30,0); // Launch on day zero is not activation.
+assert.equal(summary.dauMauRatio,.5);
+assert.equal(summary.actionsPerActive,1);
+await event('activated','2020-01-08');await event('activated','2020-01-08');
+const activated=await usageSummary(db,'2020-01-08');
+assert.equal(activated.dau,2);assert.equal(activated.actionsPerActive,1.5);
+assert.equal(activated.activationRate30,.25);assert.equal(activated.returningToday,1);
+const empty=await usageSummary(db,'1990-01-01');
+assert.equal(empty.mau,0);assert.equal(empty.activationRate30,null);assert.equal(empty.dauMauRatio,null);
+const dashboard=await worker.fetch(new Request('https://metrics.example/__metrics/'),env).then(r=>r.text());
+assert.ok(dashboard.includes("fetch('/__metrics/stats'"));assert.ok(!dashboard.includes(env.ADMIN_TOKEN));
+assert.ok(dashboard.includes('LITGRAPH / 1.2.0'));
+console.log('Usage summary: window deduplication, first-day activation, returning use, no-success inference and zero denominators passed.');
 sqlite.close();

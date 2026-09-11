@@ -18,7 +18,10 @@ for (const folder of await readdir('node_modules/.pnpm')) {
   try { const manifest = JSON.parse(await readFile(path.join(directory, 'package.json'))); if (!all.has(manifest.name)) all.set(manifest.name, { manifest, directory }); } catch {}
  }
 }
-const queue = ['d3', '3d-force-graph', 'three', 'three-spritetext', 'pdfjs-dist', 'marked', 'dompurify'], seen = new Set(), index = [];
+const queue = ['d3', '3d-force-graph', 'three', 'three-spritetext', 'pdfjs-dist', 'marked', 'dompurify', '@huggingface/transformers'], seen = new Set(), index = [];
+// Dense RAG is offline at runtime; fail packaging rather than silently omit its model.
+await readFile('dist/models/manifest.json');
+await readFile('dist/models/Xenova/multilingual-e5-small/onnx/model_quantized.onnx');
 // Acquisition is packaged as native JS plus the pinned WebVPN registry. Fail
 // before packaging if a required implementation or attribution file is missing.
 for (const file of ['scripts/acquisition-core.js', 'scripts/institution-routing.js', 'scripts/scansci-service.js', 'desktop/browser-pdf.mjs', 'desktop/institution-search.mjs', 'desktop/institution-dom.mjs', 'desktop/institution-fulltext.mjs', 'vendor/scansci/webvpn.json', 'vendor/scansci/LICENSE', 'vendor/scansci/SOURCE.md']) await readFile(file);

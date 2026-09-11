@@ -3,7 +3,7 @@ export const normalizeResearchMode = mode => mode === 'expert' ? 'expert' : 'qui
 export function researchModePolicy(mode) {
   return normalizeResearchMode(mode) === 'expert'
     ? { mode: 'expert', priority: 'depth', evidenceBudget: 42000, instruction: 'Expert is a provider-independent speed/depth preference, not a model identity or a request for longer prose. Prioritize depth over latency: carefully compare the supplied methods, results, contradictions, alternative explanations and limitations relevant to the question. Check whether conclusions really follow from the evidence. Give a focused final answer at the length the question needs; do not expose internal reasoning.' }
-    : { mode: 'quick', priority: 'speed', evidenceBudget: 28000, instruction: 'Quick is a provider-independent speed/depth preference, not a model identity or merely a short-answer instruction. Prioritize a timely final answer: focus analysis on the most relevant evidence and the current question, avoid unnecessary exhaustive exploration, and state the key result directly. Keep the same evidence and uncertainty standards as expert mode; never sacrifice accuracy or replace missing evidence with guesses.' };
+    : { mode: 'quick', priority: 'speed', evidenceBudget: 28000, instruction: 'Quick is a provider-independent speed/depth preference, not a model identity or merely a short-answer instruction. Prioritize a timely final answer: focus analysis on the most relevant evidence and the current question, avoid unnecessary exhaustive exploration, and state the key result directly. For a single conceptual question, answer in 120–220 Chinese characters or 80–140 English words (excluding the three follow-ups). Give the conclusion, the decisive source evidence and essential uncertainty; omit secondary statistics and repetitive scope disclaimers. Expand only for explicitly requested detail or multi-part comparisons. Do not repeat the question or provide a generic preamble. Keep the same evidence and uncertainty standards as expert mode; never sacrifice accuracy or replace missing evidence with guesses.' };
 }
 
 // Only documented model/protocol combinations receive native controls.
@@ -16,7 +16,7 @@ export function researchThinkingOptions(config, protocol, mode) {
   if(model==='glm-5.3'&&protocol==='openai-chat')return {thinking:{type:'enabled'},reasoning_effort:effort};
   if(model==='kimi-k2.6'&&protocol==='openai-chat')return {thinking:{type:effort==='high'?'enabled':'disabled'}};
   const deepseek = /deepseek/i.test(`${config?.provider || ''} ${model} ${config?.endpoint || ''}`);
-  if (!deepseek || !/deepseek-(?:v4|v3\.2|chat)(?:\b|[-/])/i.test(model)) return {};
+  if (!deepseek || !/deepseek-(?:flash|v4|v3\.2|chat)(?:\b|[-/])/i.test(model)) return {};
   const expert = normalizeResearchMode(mode) === 'expert';
   if (protocol === 'openai-responses') return { reasoning: { effort: expert ? 'high' : 'none' } };
   const thinking = { type: expert ? 'enabled' : 'disabled' };

@@ -1,6 +1,6 @@
 # Canvas, language and interaction
 
-LitGraph 1.1.8.
+LitGraph 1.2.0.
 
 ## Backgrounds
 

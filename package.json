@@ -1,6 +1,6 @@
 {
   "name": "litgraph",
-  "version": "1.1.8",
+  "version": "1.2.0",
   "description": "Local-first literature visualization and evidence-grounded research workspace",
   "author": "LitGraph contributors",
   "main": "desktop/main.mjs",
@@ -24,6 +24,7 @@
     "appId": "org.litgraph.desktop",
     "productName": "LitGraph",
     "asar": true,
+    "asarUnpack": ["dist/models/**/*", "node_modules/onnxruntime-node/**/*"],
     "directories": {
       "output": "release",
       "buildResources": "output/build-resources"
@@ -32,6 +33,8 @@
       "dist/**/*",
       "desktop/**/*",
       "scripts/local-service.js",
+      "scripts/rag-vector-service.mjs",
+      "scripts/rag-vector-worker.mjs",
       "scripts/scholarly-service.js",
       "scripts/public-fetch.js",
       "scripts/scansci-service.js",
@@ -40,6 +43,9 @@
       "scripts/litgraph-mcp.mjs",
       "vendor/scansci/**/*",
       "src/discovery-contract.js",
+      "src/sample-corpus.js",
+      "src/research-evidence.js",
+      "src/research-embedding.js",
       "src/settings-reset.js",
       "docs/**/*.md",
       "LICENSE",
@@ -78,6 +84,7 @@
     "vite": "7.1.7"
   },
   "dependencies": {
+    "@huggingface/transformers": "3.8.1",
     "dompurify": "^3.4.15",
     "marked": "^18.0.12"
   }

@@ -1,6 +1,8 @@
 import { localRequest } from './external-agent.js';
 import { selectEvidence } from './research-evidence.js';
+import { retrieveInWorker } from './research-worker-client.js';
 import { assessPdfTextQuality, readablePdfPage } from './pdf-text-quality.js';
+import { loadSampleDocument } from './sample-corpus.js';
 let dbPromise;
 const sourceCache = new Map();
 function database() {
@@ -88,7 +90,7 @@ export async function saveFulltext(projectId, node, document) {
   const { original, ...plain } = document;
   try {
     const originalData=original?.name?.toLowerCase().endsWith('.pdf')&&!document.originalAlreadySaved?await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result.split(',')[1]);reader.onerror=()=>reject(reader.error);reader.readAsDataURL(original);}):undefined;
-    const saved = await localRequest('document', { ...plain, originalData, projectId, nodeId: node.id });
+    const saved = await localRequest('document', { ...plain, originalData, projectId, nodeId: node.id, paperMetadata:{title:node.title,authors:node.authors,year:node.year,doi:node.doi} });
     node.fulltextKey = saved.key; document.localMarkdownPath = saved.localMarkdownPath;
     node.markdownRelativePath=saved.markdownRelativePath;node.originalRelativePath=saved.originalRelativePath;node.fulltextPersistence='disk';node.conversionQuality=document.conversionQuality||'text';
     if (saved.originalRelativePath) node.hasPdf = true;
@@ -103,17 +105,32 @@ export async function getFulltext(node) {
   if (node.fulltextStorageKey) { const cached = await storage(node.fulltextStorageKey).catch(() => null); if (cached?.markdown) return cached; }
   const cacheKey = node.fulltextKey || `${node.id}:${node.doi}:${node.title}`;
   if (sourceCache.has(cacheKey)) return sourceCache.get(cacheKey);
-  const document = await localRequest('document', node.fulltextKey ? { key: node.fulltextKey } : { node: { id: node.id, doi: node.doi, title: node.title } }).catch(() => null);
+  let document = await localRequest('document', node.fulltextKey ? { key: node.fulltextKey } : { node: { id: node.id, doi: node.doi, title: node.title, isSample: node.isSample } }).catch(() => null);
+  if (!document?.markdown && node.isSample) document = await loadSampleDocument(node, async file => {
+    const response = await fetch(`${import.meta.env?.BASE_URL || '/'}sample-fulltext/${file}`);
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error('Unable to read sample Markdown. / 无法读取样例 MD。');
+    // Static hosts sometimes return their HTML shell instead of a missing file.
+    if (response.headers.get('content-type')?.includes('text/html')) return null;
+    return response.text();
+  });
+  if (!document?.markdown && node.sampleMarkdown) throw new Error('Sample Markdown unavailable; the question was not sent using only the abstract. / 样例 MD 不可用，未降级为仅凭摘要回答。');
   if (document) sourceCache.set(cacheKey, document);
   return document;
 }
-export async function prepareEvidence(nodes, question, attachments = [], signal, budget = 42000) {
-  const documents = [];
-  for (const node of nodes) { signal?.throwIfAborted(); documents.push({ node, document: await getFulltext(node) }); }
+export async function prepareEvidence(nodes, question, attachments = [], signal, budget = 42000, plan = null, options = {}) {
+  const {onStage = () => {}, ...retrievalOptions}=options;
+  onStage('loading');
+  const documents = Array(nodes.length); let cursor=0;
+  await Promise.all(Array.from({length:Math.min(6,nodes.length)},async()=>{
+    while(cursor<nodes.length){signal?.throwIfAborted();const i=cursor++,node=nodes[i];documents[i]={node,document:await getFulltext(node)};}
+  }));
   for (const item of attachments.filter(a => a.document)) documents.push({ node: { id: item.id, title: item.name }, document: item.document });
   signal?.throwIfAborted();
-  const evidence = selectEvidence(documents, question, budget);
-  return { evidence, coverage: documents.map(({ node, document }) => ({ id: node.id, title: node.title, status: document ? 'fulltext_indexed_excerpts_only' : node.abstract ? 'abstract_only' : 'no_source_text', suppliedEvidenceIds: evidence.filter(e => e.documentId === node.id).map(e => e.id) })) };
+  onStage('retrieving');
+  const result = plan ? await retrieveInWorker(documents.map(({node,document})=>({node,document:document?{...document,original:undefined}:null})), question, plan, {signal,budget,...retrievalOptions}) : {evidence:selectEvidence(documents,question,budget)};
+  const {evidence}=result;
+  return { ...result, coverage: documents.map(({ node, document }) => ({ id: node.id, title: node.title, status: document ? 'fulltext_indexed_excerpts_only' : node.abstract ? 'abstract_only' : 'no_source_text', suppliedEvidenceIds: evidence.filter(e => e.documentId === node.id).map(e => e.id) })) };
 }
 export async function originalBlob(node) {
   if (node.fulltextStorageKey) {

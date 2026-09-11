@@ -13,6 +13,8 @@ Direct runtime dependencies include:
 | pdfjs-dist | Apache-2.0 |
 | marked | MIT |
 | dompurify | MPL-2.0 OR Apache-2.0 |
+| @huggingface/transformers (Transformers.js) | Apache-2.0 |
+| onnxruntime-node | MIT |
 | vite (development tooling) | MIT |
 | Electron | MIT; Chromium and bundled components have additional notices |
 | electron-builder (packaging tooling) | MIT |
@@ -20,6 +22,8 @@ Direct runtime dependencies include:
 | scansci-pdf WebVPN registry and adapted URL-routing logic | Apache-2.0; included subset described below |
 
 The lockfile records exact resolved dependencies, including transitive packages. Their bundled LICENSE / NOTICE files remain authoritative. Preserve applicable notices when distributing a compiled application.
+
+Local dense retrieval uses the quantized [Xenova/multilingual-e5-small](https://huggingface.co/Xenova/multilingual-e5-small) ONNX conversion of [intfloat/multilingual-e5-small](https://huggingface.co/intfloat/multilingual-e5-small), whose upstream model card declares MIT. The conversion is pinned to revision `761b726dd34fb83930e26aab4e9ac3899aa1fa78`; the preparation manifest records artifact hashes. Model weights are separate from LitGraph's original code and are not committed to the source repository.
 
 LitGraph retains the school WebVPN registry and adapts the required URL-routing logic from [Rimagination/scansci-pdf](https://github.com/Rimagination/scansci-pdf), revision `c7022a8000d266442c260623cf8b12b63b10c1e3`. The included files and modifications are documented in `vendor/scansci/SOURCE.md`; the original upstream license is retained in `vendor/scansci/LICENSE`. The upstream Python package, bundled browsers, optional PDF converters and proprietary compiled `_core` components are not part of this integration or installer. Original LitGraph code remains MIT; that does not relicense retained upstream material as MIT.
 

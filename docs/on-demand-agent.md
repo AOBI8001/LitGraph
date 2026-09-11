@@ -3,7 +3,7 @@
 ## 使用方式
 
 1. 安装官方原生 Codex CLI 或 Claude Code，并在该工具中登录一次。普通网页聊天或任意 MCP 客户端不能替代 CLI。LitGraph 不代填登录凭据。
-2. 在“模型接入 → 方式1”选择工具，点击“连结并验证”。自动查找失败时，用“选择程序”选择官方 `codex.exe` 或 `claude.exe`，不粘贴命令或脚本。
+2. 在“模型接入 → 方式2”选择工具，点击“连结并验证”。自动查找失败时，用“选择程序”选择官方 `codex.exe` 或 `claude.exe`，不粘贴命令或脚本。
 3. 验证会发送一个很短的真实模型请求，使用该工具账号的额度。成功后保存工具选择；软件重启后复用选择和 CLI 自身的登录状态，无需重新复制接入说明。
 4. 直接在 LitGraph 检索、导入分析或提问。无需持续运行外部聊天任务。登录过期、额度不足、网络中断或 CLI 参数不兼容时，任务会报错，需要处理原因后重新发送。
 
@@ -33,7 +33,7 @@
 
 ## English
 
-Install and sign in to the official native Codex CLI or Claude Code. In **Model connection → Method 1**, choose the tool and **Connect & verify**. If detection fails, select its executable. Verification uses a small real request and that tool's account quota. LitGraph stores the selection and reuses CLI authentication after restart; no permanently running chat or repeated instruction copying is needed.
+Install and sign in to the official native Codex CLI or Claude Code. In **Model connection → Method 2**, choose the tool and **Connect & verify**. If detection fails, select its executable. Verification uses a small real request and that tool's account quota. LitGraph stores the selection and reuses CLI authentication after restart; no permanently running chat or repeated instruction copying is needed.
 
 Search planning, imported-paper analysis and research questions share a bounded queue. Each request carries its existing output contract and evidence. Search/download remain application-owned; the CLI does not obtain institution cookies or additional file access.
 

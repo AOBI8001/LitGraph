@@ -32,3 +32,7 @@ await failed.start();
 assert.equal(failed.status, 'error');
 assert.equal(failed.error.message, 'network');
 console.log('Research lifecycle: pause, abort, resume, duplicates, stale response, cumulative timer and failure passed.');
+let stageClock=0;
+const staged=new ResearchRequest(async(signal,stage)=>{stageClock=25;stage('loading');stageClock=75;stage('generating');stageClock=175;return 'ok';},()=>{},()=>stageClock);
+await staged.start();
+assert.deepEqual(staged.timings,{preparing:25,loading:50,generating:100});

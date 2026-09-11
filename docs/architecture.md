@@ -4,7 +4,7 @@
 
 `desktop/agent-runtime.mjs` launches official Codex CLI / Claude Code processes. `scripts/local-service.js` routes search planning, paper analysis and research chat through one bounded queue. Each task carries its existing evidence/output contract; authentication remains with the user's CLI. See [on-demand execution](on-demand-agent.md) for cancellation, safety and limitations. Legacy manual MCP remains separate and cannot claim managed jobs.
 
-_LitGraph 1.1.8 · Windows desktop architecture and the separate developer web preview_
+_LitGraph 1.2.0 · Windows desktop architecture and the separate developer web preview_
 
 ---
 
@@ -31,7 +31,7 @@ The shared retrieval/download core is described in [scansci-integration.md](scan
 - `scripts/acquisition-core.js`: verified PDF locations first, official PMC alternatives and bounded article-page link extraction; 30-second OA budget, 12 seconds per candidate request, at most six candidate URLs and two simultaneous candidates.
 - `scripts/institution-routing.js` / `vendor/scansci/`: Apache-2.0-attributed school gateway configuration, WebVPN AES-CFB URL conversion and explicit EZProxy templates. Registry presence is not proof of institution access.
 - `scripts/public-fetch.js`: bounded HTTPS downloads with public-address validation, pinned DNS and redirect checks.
-- `src/research-evidence.js`: Markdown chunks, lexical ranking and optional citation-ID validation.
+- `src/research-evidence.js`: paragraph/sentence chunks, metadata, exact source locations and citation-ID validation. Research uses `research-query.js` and `research-hybrid.js` for dual-level/multi-query planning, BM25+dense retrieval and feature reranking; `research-worker.js` runs the local multilingual embedding model. See [RAG and graph specification](RAG_AND_GRAPH.md) for implementation limits and scaling design.
 - `src/research-agent.js`: source-grounded answer and follow-up-question contract.
 - `src/summary-language.js`: language-specific summaries and faithful translation instructions.
 - `scripts/local-service.js`: loopback-only authenticated search, PDF / Markdown storage, import snapshots and external Agent task queue.
@@ -65,7 +65,7 @@ A summary alone is not full text. No source text is fabricated when a download f
 
 PDF text validation distinguishes widespread Unicode corruption from isolated undecodable formula/table glyphs. Readable pages are preserved; ambiguous glyphs become `[unmapped PDF symbol]` with a per-page extraction note. Their missing meaning is never guessed. Research must not derive numerical claims from affected expressions, and candidate relationships quoting these markers are rejected. Rejected edges do not discard a valid paper node, summary or classification; history exposes validation reasons.
 
-**Reset all settings** removes API credentials, external-agent pairing, institution sign-in/portal settings and interface preferences. It retains projects, original files, Markdown, analyses, vectors, graph JSON, conversations and import history. It uses an explicit preference-key list, never a blanket data-directory or browser-storage clear. **Delete configuration** in Method 2 removes only the API configuration. Desktop credentials are removed from the OS-encrypted configuration file as well as the interface. Active work must be paused or completed first.
+**Reset all settings** removes API credentials, external-agent pairing, institution sign-in/portal settings and interface preferences. It retains projects, original files, Markdown, analyses, vectors, graph JSON, conversations and import history. It uses an explicit preference-key list, never a blanket data-directory or browser-storage clear. **Delete configuration** in Method 1 removes only the API configuration. Desktop credentials are removed from the OS-encrypted configuration file as well as the interface. Active work must be paused or completed first.
 
 OA acquisition reuses already verified source PDF locations before additional metadata lookup. The first complete PDF ends the candidate race and cancels losing requests. Missing, denied or timed-out sources produce a per-paper result; they do not trigger an unbounded upstream all-source/browser race. Original saving, conversion and analysis remain separately resumable.
 

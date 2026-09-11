@@ -18,8 +18,10 @@ try{
  const acquired=(await call('acquire',{recordId:'verified',projectId:'project',nodeId:'node'},token)).data;
  assert.equal(Buffer.from(acquired.data,'base64').toString(),pdf.toString());assert.ok(acquired.originalRelativePath);
  assert.equal(resolverCalls,0,'An already accessible PDF must not wait for alternative repositories');
- const saved=(await call('document',{projectId:'project',nodeId:'node',markdown:'# Original\n\nEvidence text',fileName:'paper.md'},token)).data;
+ const saved=(await call('document',{projectId:'project',nodeId:'node',paperMetadata:{title:paper.title,authors:paper.authors,year:paper.year,doi:paper.doi},markdown:'# Original\n\nEvidence text',fileName:'paper.md'},token)).data;
  assert.equal((await readFile(path.join(root,saved.markdownRelativePath),'utf8')).includes('Evidence'),true);
+ const chunkRecord=JSON.parse(await readFile(path.join(root,'data','chunks',saved.key+'.json'),'utf8'));
+ assert.ok(chunkRecord.chunks.length);assert.equal(chunkRecord.chunks[0].title,paper.title);assert.deepEqual(chunkRecord.chunks[0].authors,paper.authors);assert.equal(chunkRecord.chunks[0].year,paper.year);
  dependencies.download=async()=>({bytes:Buffer.from('<html>Sign in required</html>'),url:'https://example.org/login'});
  middleware=localService(root,dependencies);const restrictedToken=(await call('bootstrap',{})).data.browserToken;await call('search',{},restrictedToken);
  const unavailable=(await call('acquire',{recordId:'verified',projectId:'project',nodeId:'unavailable'},restrictedToken)).data;
@@ -56,7 +58,7 @@ try{
   assert.equal((await call('original',{key:'../../outside'},nativeToken)).data,null);
   const folder=(await call('data-folder',{path:'../../ignored'},nativeToken)).data;
   assert.equal(folder.opened,true);assert.equal(dataFolder,path.join(movedRoot,'data'));
-  assert.deepEqual((await readdir(dataFolder)).sort(),['analysis','markdown','originals','projects','records','vectors']);
+  assert.deepEqual((await readdir(dataFolder)).sort(),['analysis','chunks','markdown','originals','projects','records','vectors']);
   const legacyKey='a'.repeat(64),legacy=path.join(movedRoot,'projects','local-fulltext-index');await mkdir(legacy,{recursive:true});
   await writeFile(path.join(legacy,legacyKey+'.pdf'),pdf);
   await writeFile(path.join(legacy,legacyKey+'.json'),JSON.stringify({key:legacyKey,originalRelativePath:'projects/local-fulltext-index/'+legacyKey+'.pdf',markdown:'# Retained legacy text',localMarkdownPath:'Z:/old-device/obsolete.md'}));

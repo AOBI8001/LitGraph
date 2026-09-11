@@ -23,17 +23,26 @@ export class ResearchRequest {
     this.controller = new AbortController();
     this.startedAt = this.now();
     this.status = 'pending';
+    this.stage = 'preparing';
+    this.stageStartedAt=this.now();
+    this.timings={};
     this.onChange(this, 'state');
     this.timer = setInterval(() => this.onChange(this, 'tick'), 1000);
     try {
-      const result = await this.execute(this.controller.signal);
+      const result = await this.execute(this.controller.signal, stage=>{
+        if(generation!==this.generation)return;
+        const now=this.now();this.timings[this.stage]=(this.timings[this.stage]||0)+now-this.stageStartedAt;
+        this.stage=stage;this.stageStartedAt=now;this.onChange(this,'tick');
+      });
       if (generation !== this.generation) return;
       this.elapsedMs = this.elapsed();
+      this.timings[this.stage]=(this.timings[this.stage]||0)+this.now()-this.stageStartedAt;
       this.status = 'done';
       this.result = result;
     } catch (error) {
       if (generation !== this.generation) return;
       this.elapsedMs = this.elapsed();
+      this.timings[this.stage]=(this.timings[this.stage]||0)+this.now()-this.stageStartedAt;
       this.status = 'error';
       this.error = error;
     } finally {
@@ -46,6 +55,7 @@ export class ResearchRequest {
   pause() {
     if (this.status !== 'pending') return;
     this.elapsedMs = this.elapsed();
+    this.timings[this.stage]=(this.timings[this.stage]||0)+this.now()-this.stageStartedAt;
     this.status = 'paused';
     ++this.generation;
     clearInterval(this.timer);

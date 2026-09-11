@@ -10,9 +10,9 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.1.8 · Windows 10 / 11 x64 · MIT licensed**
+**1.2.0 · Windows 10 / 11 x64 · MIT licensed**
 
-> This page describes the 1.1.8 source. Downloadable installer versions are listed in Releases.
+> This page describes the 1.2.0 source. Downloadable installer versions are listed in Releases.
 
 [Download](https://github.com/AOBI8001/LitGraph/releases/latest) · [Website](https://litgraph.aobi.qzz.io/) · [Feedback](https://github.com/AOBI8001/LitGraph/issues)
 
@@ -20,6 +20,7 @@ See the relationships in the graph. Investigate them in conversation. Your paper
 
 ## 📍 Contents
 
+- [Product tour](#product-tour)
 - [Download and get started](#-download-and-get-started)
 - [From a research question to a paper collection](#-from-a-research-question-to-a-paper-collection)
 - [Explore the structure of the literature](#-explore-the-structure-of-the-literature)
@@ -29,6 +30,42 @@ See the relationships in the graph. Investigate them in conversation. Your paper
 - [Data and privacy](#-data-and-privacy)
 - [Frequently asked questions](#-frequently-asked-questions)
 - [Documentation and open-source collaboration](#-documentation-and-open-source-collaboration)
+
+## Product tour
+
+Screenshots show graph exploration, discovery, and source-grounded research workflows. Answers depend on the project’s source texts, retrieved evidence, and connected model.
+
+### 2D theory clustering
+
+<img src="docs/images/2d-theory.png" alt="2D theory clustering" width="1000">
+
+### 2D semantic vectors
+
+<img src="docs/images/2d-semantic.png" alt="2D semantic vectors" width="1000">
+
+### 3D theory clustering
+
+<img src="docs/images/3d-theory.png" alt="3D theory clustering" width="1000">
+
+### 2D year tree
+
+<img src="docs/images/year-tree.png" alt="2D year tree" width="600">
+
+### Literature discovery: search and confirmation
+
+<img src="docs/images/discovery.png" alt="Literature discovery: search and confirmation" width="1000">
+
+### Research Space: factual retrieval across papers
+
+<img src="docs/images/research-facts.png" alt="Research Space: factual retrieval across papers" width="1000">
+
+### Research Space: comparing selected papers
+
+<img src="docs/images/research-comparison.png" alt="Research Space: comparing selected papers" width="1000">
+
+### Paper and relationship data table
+
+<img src="docs/images/data-table.png" alt="Paper and relationship data table" width="1000">
 
 ## 📦 Download and get started
 
@@ -53,7 +90,7 @@ The application opens with a blank project and four starting points:
 | **Literature discovery** | Search from a research topic |
 | **Choose paper files** | Import existing research materials |
 
-Load the sample to learn the graph, then create a project for your own work. The sample contains public bibliographic metadata and graph relationships, including theory-category colors. Full-text analysis requires the corresponding readable originals.
+Load the sample to learn the graph, then create your own project. It contains 50 paper nodes with theory-category colors; two nodes refer to the same paper. Builds with the optional Markdown corpus support source-grounded questions without PDF files. Builds without that corpus indicate missing originals. Article full text is not published in the source repository; see [sample corpus documentation](docs/SAMPLE_CORPUS.md).
 
 ### A complete workflow
 
@@ -213,7 +250,15 @@ Both preferences follow the same evidence requirements. They adjust context budg
 
 ## 🔌 Choose your AI
 
-### Option 1: External Agent
+### Option 1: Model API
+
+Call a model directly from the product. Enter the service address, API key, and model name, then use Test & save. Enable image support according to the provider's actual capabilities.
+
+Supported protocols include OpenAI-compatible Chat Completions, OpenAI Responses, and Anthropic Messages. Services implementing those protocols can be configured; model availability, permissions, and quotas are controlled by each provider.
+
+LitGraph supplies scholarly search, acquisition, text conversion, and file association. The model supplies search planning, original-paper analysis, and research answers. API mode supports the same workflow, with model configuration encrypted using operating-system facilities.
+
+### Option 2: External Agent
 
 Use your Codex CLI or Claude Code account. The desktop app starts independent tasks on demand for search planning, imported-paper analysis and research questions. Processes exit after completion; no persistent chat task is required.
 
@@ -238,42 +283,34 @@ Manual MCP is a separate compatibility path: LitGraph prepares questions, eviden
 
 Search planning, candidate assessment, and research answers each have their own output contract. Connection status reflects recent handshake and tool activity; the Agent must continue claiming tasks to answer new requests. See the [shared Agent guide](docs/LITGRAPH_AGENT_GUIDE.md) for the complete agreement.
 
-### Option 2: Model API
-
-Call a model directly from the product. Enter the service address, API key, and model name, then use Test & save. Enable image support according to the provider's actual capabilities.
-
-Supported protocols include OpenAI-compatible Chat Completions, OpenAI Responses, and Anthropic Messages. Services implementing those protocols can be configured; model availability, permissions, and quotas are controlled by each provider.
-
-LitGraph supplies scholarly search, acquisition, text conversion, and file association. The model supplies search planning, original-paper analysis, and research answers. API mode supports the same workflow, with model configuration encrypted using operating-system facilities.
-
 <a name="algorithms"></a>
 
 ## ⚙️ RAG, layout algorithms, and optimizations
 
 ### Research RAG: Retrieve within a defined paper scope
 
-Research space uses **retrieval-augmented generation (RAG)**: retrieve evidence from the specified papers, then generate an answer using that evidence. The current retrieval layer uses deterministic term matching, per-paper coverage allocation, and a limited set of explicit Chinese/English term expansions.
+Research space uses **retrieval-augmented generation (RAG)**: a model generates multiple queries and high-/low-level keywords, then local BM25 and multilingual dense retrieval supply merged, reranked evidence from the selected papers.
 
 ```mermaid
 flowchart LR
     accTitle: LitGraph research evidence workflow
     accDescr: A request captures its paper scope, retrieves and ranks source passages, allocates evidence context, then generates and validates an answer with follow-up questions.
     paper_scope[Capture the paper scope] --> source_text[Load text and coverage]
-    source_text --> rank_chunks[Chunk and rank passages]
-    rank_chunks --> evidence_budget[Allocate evidence across papers]
+    source_text --> rank_chunks[Paragraph chunks and hybrid multi-query retrieval]
+    rank_chunks --> evidence_budget[Rerank and allocate target-paper evidence]
     evidence_budget --> generate_answer[Generate answer and follow-ups]
     generate_answer --> validate_result[Validate structure and evidence IDs]
 ```
 
 The implementation:
 
-- Splits text into chunks of roughly 1,800 characters, preserving PDF page markers where present.
-- Scores question-term overlap, with a small explicit bilingual expansion dictionary.
-- Allocates passages across papers with available evidence before filling remaining capacity with relevant excerpts.
+- Preserves paragraph, section and page boundaries, splitting long paragraphs at sentence boundaries near 1,400 characters. Each chunk carries paper metadata and source positions.
+- Combines rewritten queries, BM25 and local multilingual-e5-small dense vectors through RRF and feature reranking.
+- Uses development-selected top-k=20 with coverage for explicitly named comparison papers and complete chunks.
 - Uses evidence budgets of approximately 28,000 / 42,000 characters for Quick / Expert, alongside a bounded recent conversation.
-- Requires an answer and three follow-ups, and checks supplied evidence IDs when an answer cites them.
+- Requires an answer and three follow-ups, asks for factual evidence IDs, validates supplied IDs and displays actual PDF file pages / Markdown line locations.
 
-These mechanisms govern scope, evidence supply, and response structure. An external vector database and a separate reranking model are not part of the current implementation. See the [Research space RAG contract](docs/research-space-rag-agent-spec.md).
+Dense inference runs in a separate local CPU worker with persistent caching. There is no external vector database or cross-encoder. See the [implementation and scaling boundaries](docs/RAG_AND_GRAPH.md) and [evaluation protocol](docs/RAG_BENCHMARK_V2.md).
 
 ### Graph algorithms: Theories and text similarity
 

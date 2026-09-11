@@ -1,6 +1,6 @@
 # Research space: current behavior
 
-LitGraph 1.1.8.
+LitGraph 1.2.0.
 
 The subtitle is “回答以原文证据为依据，AI 推断会额外标出。” / “Answers are grounded in source evidence; AI inferences are explicitly marked.”
 
@@ -12,6 +12,8 @@ Quick / expert indicate a speed-versus-depth preference, not a guaranteed latenc
 
 The backend may return only reasoning, an error, or malformed JSON even when the connection test succeeds. Such a response is not a usable final answer. The UI must explain the failure rather than exposing internal reasoning as the answer.
 
-Answers use retrieved original excerpts where available. Missing full text is disclosed per paper. By default, no extra citation list is appended; explicitly requested sources must refer to supplied evidence. AI inference is marked. Three short follow-up questions arise from the actual answer and can be clicked to ask the next question.
+Answers use retrieved original excerpts where available. Missing full text is disclosed per paper. Factual claims cite supplied evidence IDs, with verified PDF page/Markdown line locations appended by the application. AI inference is marked. Three short follow-up questions arise from the actual answer and can be clicked to ask the next question.
+
+Short conceptual questions in Quick mode use local vocabulary expansion and one answer-model call. Precise facts, comparisons and contextual follow-ups retain model query planning. The entire selected corpus remains eligible for hybrid retrieval. The bundled sample contains reusable passage vectors, not cached answers; new user documents and new questions are encoded with the local model when needed. Progress names the active stage, and message records retain local stage timings. External model/network/queue time is outside a fixed local latency guarantee.
 
 See [AI contract](research-space-rag-agent-spec.md), [storage and limitations](architecture.md) and [external Agent guide](LITGRAPH_AGENT_GUIDE.md).

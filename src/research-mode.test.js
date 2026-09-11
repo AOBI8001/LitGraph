@@ -4,6 +4,7 @@ import { researchTokenBudget } from './ai-response.js';
 const config = { model: 'deepseek-v4-pro', provider: 'deepseek' };
 assert.equal(normalizeResearchMode('bad'), 'quick');
 assert.equal(researchModePolicy('quick').evidenceBudget, 28000);
+assert.deepEqual(researchThinkingOptions({model:'deepseek-flash',provider:'deepseek'},'openai-chat','quick'),{thinking:{type:'disabled'}});
 assert.equal(researchModePolicy('expert').evidenceBudget, 42000);
 assert.equal(researchModePolicy('quick').priority, 'speed');
 assert.equal(researchModePolicy('expert').priority, 'depth');

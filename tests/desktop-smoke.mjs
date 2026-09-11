@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import http from 'node:http';
+import {gunzipSync} from 'node:zlib';
 const root = process.cwd();
 await mkdir('output/desktop', { recursive: true });
 const dataDir = await mkdtemp(path.join(root, 'output/desktop/profile-'));
@@ -40,6 +41,16 @@ try {
  assert.equal(await page.evaluate(() => typeof window.require), 'undefined');
  assert.equal(await page.evaluate(() => window.litgraphDesktop.bootstrap().metricsEnabled), false);
  assert.equal(await page.evaluate(() => window.litgraphDesktop.bootstrap().version), JSON.parse(await readFile('package.json', 'utf8')).version);
+ await page.waitForFunction(() => document.querySelector('#window-maximize').getAttribute('aria-pressed') === 'true');
+ assert.equal(await page.locator('#window-maximize svg path').count(),1);
+ await page.locator('#window-maximize').click();
+ await page.waitForFunction(() => document.querySelector('#window-maximize').getAttribute('aria-pressed') === 'false');
+ assert.equal(await page.locator('#window-maximize svg path').count(),0);
+ // Native maximize events (including title-bar actions) must update the glyph.
+ await application.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].maximize());
+ await page.waitForFunction(() => document.querySelector('#window-maximize').getAttribute('aria-pressed') === 'true');
+ assert.equal(await page.locator('.about-content a').getAttribute('href'),'https://github.com/AOBI8001/LitGraph');
+ assert.equal(await page.locator('.about-content a').getAttribute('target'),'_blank');
  await application.evaluate(async ({ clipboard, ClipboardItem }) => { globalThis.litgraphTestClipboard = await Promise.all((await clipboard.read()).filter(item => item.types.length).map(async item => new ClipboardItem(Object.fromEntries(await Promise.all(item.types.map(async type => [type, await item.getType(type)])))))); });
  try {
   await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].blur());
@@ -52,6 +63,23 @@ try {
   // depend on navigator.clipboard after its asynchronous instruction request.
   await page.evaluate(() => { window.originalClipboardWriter = navigator.clipboard.writeText; navigator.clipboard.writeText = async () => { throw new DOMException('Document is not focused.', 'NotAllowedError'); }; });
   await page.locator('#empty-model-access').click();
+  assert.equal(await page.locator('.connection-method-title').textContent(),'方式1：API');
+  assert.ok((await page.locator('#external-agent-label').textContent()).startsWith('方式2：外部 Agent'));
+  assert.equal(await page.evaluate(()=>Boolean(document.querySelector('.connection-method-title').compareDocumentPosition(document.querySelector('#external-agent-label')) & Node.DOCUMENT_POSITION_FOLLOWING)),true);
+  await page.screenshot({path:'output/desktop/model-connection-1.2.0.png'});
+  await page.locator('[data-close-modal="api"]').first().click();
+  await page.locator('#language-button').click();
+  await page.locator('#empty-model-access').click();
+  assert.equal(await page.locator('.connection-method-title').textContent(),'Method 1: API');
+  assert.ok((await page.locator('#external-agent-label').textContent()).startsWith('Method 2: External agent'));
+  assert.equal(await page.locator('#window-maximize').getAttribute('aria-label'),'Restore window');
+  await page.screenshot({path:'output/desktop/model-connection-en-1.2.0.png'});
+  await page.locator('[data-close-modal="api"]').first().click();
+  await page.locator('#language-button').click();
+  await page.locator('#empty-model-access').click();
+  assert.equal(await page.locator('#api-model').inputValue(),'deepseek-flash');
+  assert.equal(await page.locator('#api-endpoint').inputValue(),'https://api.deepseek.com');
+  assert.equal(await page.locator('#api-model option:checked').textContent(),'DeepSeek V4.1 Flash');
   await page.locator('.manual-agent-access summary').click();
   await page.locator('#copy-agent-instructions').click();
   await page.waitForTimeout(500);
@@ -63,6 +91,24 @@ try {
  }
  await page.locator('#empty-sample-project').click();
  await page.waitForFunction(() => document.querySelector('#project-selector-label')?.textContent.includes('样例'));
+ const sampleData = await page.evaluate(() => JSON.parse(localStorage.getItem('litgraph.projects.v1'))['sample-project'].data);
+ const hasCorpus = await readFile(path.join(root, 'dist/sample-fulltext/index.json'), 'utf8').then(() => true, () => false);
+ if (hasCorpus) {
+  assert.equal(sampleData.nodes.filter(node => node.sampleMarkdown).length, 50);
+  assert.ok(sampleData.nodes.every(node => node.hasPdf === false));
+  assert.equal(sampleData.meta.fullTextCount, 50);
+  const source=await page.evaluate(async node=>{const boot=await(await fetch('/__litgraph/bootstrap',{method:'POST'})).json();const response=await fetch('/__litgraph/document',{method:'POST',headers:{Authorization:'Bearer '+boot.browserToken,'Content-Type':'application/json'},body:JSON.stringify({node})});return response.json();},sampleData.nodes[0]);
+  assert.ok(source?.markdown?.length>1000,'Packaged sample MD must be available without a PDF');
+  const index=JSON.parse(gunzipSync(await readFile(path.join(root,'dist/sample-fulltext/vectors.e5.q8.json.gz'))));
+  const [key,input,encoded]=index.records[0];
+  const cachedVector=await page.evaluate(async text=>{const boot=await(await fetch('/__litgraph/bootstrap',{method:'POST'})).json();const response=await fetch('/__litgraph/embeddings',{method:'POST',headers:{Authorization:'Bearer '+boot.browserToken,'Content-Type':'application/json'},body:JSON.stringify({texts:[text],kind:'passage'})});return (await response.json()).vectors[0];},input.slice('passage: '.length));
+  const bytes=Buffer.from(encoded,'base64');assert.deepEqual(cachedVector,Array.from({length:384},(_,i)=>bytes.readFloatLE(i*4)));
+  const regenerated=await readFile(path.join(dataDir,'data/vectors/rag',key.replaceAll(':','_')+'.json')).then(()=>true,()=>false);
+  assert.equal(regenerated,false,'Bundled sample passage was needlessly re-encoded');
+ }
+ const vectors=await page.evaluate(async()=>{const boot=await(await fetch('/__litgraph/bootstrap',{method:'POST'})).json();const response=await fetch('/__litgraph/embeddings',{method:'POST',headers:{Authorization:'Bearer '+boot.browserToken,'Content-Type':'application/json'},body:JSON.stringify({texts:['动作抑制','inhibition of actions'],kind:'query'})});const data=await response.json();if(!response.ok)throw Error(data.error);return data.vectors;});
+ assert.equal(vectors.length,2);assert.ok(vectors.every(v=>v.length===384&&v.every(Number.isFinite)));
+ assert.ok(vectors[0].reduce((s,v,i)=>s+v*vectors[1][i],0)>.7,'Shipped multilingual model failed semantic similarity check');
  await page.evaluate(() => localStorage.setItem('litgraph.desktop-test', 'persistent'));
  const config = { endpoint: 'http://127.0.0.1:9999', model: 'test-model', apiKey: 'TEST-ONLY-NOT-A-REAL-KEY' };
  await page.evaluate(config => window.litgraphDesktop.saveConfig(config), config);
@@ -140,6 +186,13 @@ try {
   await page.getByRole('link',{name:/用户反馈/}).click();
   await page.waitForTimeout(150);
   assert.equal(await application.evaluate(()=>globalThis.feedbackURL),'https://my.feishu.cn/share/base/form/shrcnbw8bQOlnsv8EXdKFaXnoIy');
+  await page.getByRole('link',{name:/产品网站/}).click();
+  await page.waitForTimeout(150);
+  assert.equal(await application.evaluate(()=>globalThis.feedbackURL),'https://litgraph.aobi.qzz.io/');
+  // Exercise the same trusted external-link handler without opening a real browser.
+  await page.locator('.about-content a').evaluate(link=>link.click());
+  await page.waitForTimeout(150);
+  assert.equal(await application.evaluate(()=>globalThis.feedbackURL),'https://github.com/AOBI8001/LitGraph');
   await page.getByRole('button',{name:'设置',exact:true}).click();
  } finally {await application.evaluate(({shell})=>{shell.openExternal=globalThis.savedOpenExternal;delete globalThis.savedOpenExternal;});}
  assert.ok(instructions.contracts.discovery.startsWith(dataDir));

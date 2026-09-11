@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const read=name=>readFile(path.join(root,name),'utf8');
 const ignore=await read('.gitignore');
-for(const entry of ['projects/','data/','output/','.playwright-cli/','versions/','.env','node_modules/','dist/','*.local.json','release/'])
+for(const entry of ['projects/','data/','public/sample-fulltext/','output/','.playwright-cli/','versions/','.env','node_modules/','dist/','*.local.json','release/'])
  assert.ok(ignore.split(/\r?\n/).includes(entry),'Missing ignore rule: '+entry);
 assert.match(await read('LICENSE'),/MIT License/);
 assert.equal(JSON.parse(await read('package.json')).license,'MIT');
@@ -19,7 +19,7 @@ assert.doesNotMatch(JSON.stringify(sample),/\b[A-Z]:[\\/]|\\Users\\|localTextPat
 const tracked=execFileSync('git',['ls-files','-z'],{cwd:root,encoding:'utf8'}).split('\0').filter(Boolean);
 const secrets=await read('output/metrics-admin.local.json').then(JSON.parse).catch(()=>({}));
 for(const file of tracked){
- assert.doesNotMatch(file,/^(?:projects|data|output|release|node_modules)\/|\.local\.json$|\.env$/,'Private path tracked');
+ assert.doesNotMatch(file,/^(?:projects|data|output|release|node_modules)\/|^public\/sample-fulltext\/|\.local\.json$|\.env$/,'Private path tracked');
  const bytes=await readFile(path.join(root,file));
  for(const secret of Object.values(secrets))if(typeof secret==='string'&&secret.length>20)assert.ok(!bytes.includes(Buffer.from(secret)),'Operator secret in tracked file: '+file);
  if(/\.(?:js|mjs|cjs|md|json)$/.test(file))assert.doesNotMatch(bytes.toString(),/sk-[a-zA-Z0-9_-]{30,}|gh[pousr]_[a-zA-Z0-9]{30,}|github_pat_[a-zA-Z0-9_]{30,}/,'Potential credential in '+file);
@@ -28,6 +28,9 @@ for(const file of ['README.md','README.en.md']){
  const markdown=await read(file);
  assert.ok(markdown.includes(JSON.parse(await read('package.json')).version),'README version must match package.json');assert.match(markdown,/5.*10.*20.*50.*100/);
  for(const match of markdown.matchAll(/\]\(([^\s)]+)\)/g))if(!/^https?:|^#/.test(match[1]))await readFile(path.join(root,match[1].split('#')[0]));
+ const images=[...markdown.matchAll(/<img src="(docs\/images\/[^"]+)" alt="[^"]+"/g)];
+ assert.equal(images.length,8,'Both READMEs must contain all eight product screenshots');
+ for(const [,file]of images)assert.ok((await readFile(path.join(root,file))).length>1000);
 }
 console.log('Publication checks passed: MIT, 50-paper sample, ignored private files, no known personal paths.');
 console.log('Review staged files for secrets before pushing. No Release is created by this check.');

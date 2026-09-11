@@ -128,6 +128,8 @@ async function startDesktop() {
     }
     throw Error('Unknown agent action');
   });
+  const windowState = () => ({ maximized: window.isMaximized(), fullscreen: window.isFullScreen() });
+  ipcMain.handle('desktop:window-state', event => { guard(event); return windowState(); });
   ipcMain.handle('desktop:control', (event, action) => {
     guard(event);
     if (action === 'minimize') window.minimize();
@@ -191,6 +193,9 @@ async function startDesktop() {
     if (/^https?:\/\//i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
+  for (const event of ['maximize', 'unmaximize', 'enter-full-screen', 'leave-full-screen']) {
+    window.on(event, () => window.webContents.send('desktop:window-state-changed', windowState()));
+  }
   window.webContents.on('will-navigate', (event, url) => { if (!url.startsWith(origin + '/')) { event.preventDefault(); if (/^https?:\/\//i.test(url)) void shell.openExternal(url); } });
   const allowPermission = (contents, permission) => contents === window.webContents && contents.getURL().startsWith(origin + '/') && ['fullscreen', 'clipboard-sanitized-write'].includes(permission);
   window.webContents.session.setPermissionCheckHandler((contents, permission) => allowPermission(contents, permission));

@@ -879,7 +879,8 @@ html[lang="en"] .about-content p { text-indent: 0; }
 .message-markdown :is(th,td) { border: 1px solid var(--line); padding: 6px 9px; text-align: left; }
 .message-markdown th { background: var(--tool-tint); }
 .message-markdown a { color: var(--focus); text-decoration: underline; }
-.about-content a { display: inline-flex; align-items: center; min-height: 34px; padding: 0 12px; border-radius: 6px; color: #fff; background: #2d333a; text-decoration: none; font-size: 9px; }
+.about-content a { color: #1767c9; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+[data-theme="dark"] .about-content a { color: #83b8ff; }
 
 [data-theme="dark"] .inspector-close-tab { color: #f1f1f3; background: transparent; }
 [data-theme="dark"] .inspector-close-tab:hover { color: #fff; background: #3a3a3e; }
@@ -3381,7 +3382,7 @@ html[lang="en"] .discovery-choice.discovery-source-beta { padding-right: 27px; }
 #api-form .external-agent-help, #api-form .external-agent-status, #api-form .api-provider-help { font-size: 11px; line-height: 1.7; color: var(--muted); margin: 7px 0 0; overflow-wrap: anywhere; }
 #api-form .external-agent-status.connected { color: #269569; }
 #api-form .api-provider-help { margin: 0 0 2px; }
-#api-form .external-agent-section { padding-bottom: 18px; margin-bottom: 7px; }
+#api-form .external-agent-section { border-bottom: 0; border-top: 1px solid var(--line); padding: 18px 0 0; margin: 12px 0 0; }
 #api-form .agent-runtime-controls { padding: 0; border: 0; background: transparent; gap: 8px; margin-top: 12px; }
 #api-form .agent-runtime-controls button { height: 35px; font-size: 11px; }
 #api-form #connect-agent-runtime { background: var(--tool-accent, #7047eb); border-color: transparent; color: #fff; }

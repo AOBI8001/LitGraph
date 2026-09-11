@@ -14,6 +14,12 @@ contextBridge.exposeInMainWorld('litgraphDesktop', {
   },
   agentRuntime: (action,data) => ipcRenderer.invoke('desktop:agent-runtime',action,data),
   control: action => ipcRenderer.invoke('desktop:control', action),
+  windowState: () => ipcRenderer.invoke('desktop:window-state'),
+  onWindowState: callback => {
+    const listener = (_event, state) => callback(state);
+    ipcRenderer.on('desktop:window-state-changed', listener);
+    return () => ipcRenderer.removeListener('desktop:window-state-changed', listener);
+  },
   recordUse: action => ipcRenderer.invoke('desktop:use', action),
   setMetricsEnabled: enabled => ipcRenderer.invoke('desktop:metrics', enabled),
   modelRequest: request => ipcRenderer.invoke('desktop:model-request', request),

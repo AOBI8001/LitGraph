@@ -1,0 +1,42 @@
+# Research Space latency / 研究空间响应时间
+
+## 当前改动
+
+- 初次配置默认选择 **DeepSeek V4.1 Flash**，接口标识为 `deepseek-flash`。保留已有 API 配置和外部 Agent 连接，不自动替换用户已经配置的模型。
+- 样例额外携带 3,789 条去重后的原文段落向量，压缩文件约 7.3 MB；50 篇 MD 共形成 3,943 个含论文身份的候选段落。它不是答案缓存。缓存绑定模型版本和完整段落文本，文档变化时重新编码。
+- 全部选定论文仍参与混合检索。不会只保留一个小候选库以换取速度。
+- 快速模式的短概念问题采用本地中英文词汇扩展，只调用一次回答模型。数字、精确事实、明确论文标题、复杂问题、比较和上下文追问继续使用模型改写；专家模式也保留改写。
+- 快速概念问题：单篇最多 6 个完整片段/8,000 字符，多篇最多 10 个/12,000 字符。模型改写的问题保留原先 top-k=20 和 28,000/42,000 字符的快速/专家预算。
+- 原文读取最多六路并行；同批相同文本只编码一次；模型输入不再附带所有未检中论文的摘要和旧总结。论文元数据只发送一次，原文位置仍保留。
+- 界面显示正在读取原文、检索证据、改写问题或等待模型；每次请求将阶段用时保存在本地消息记录中。
+
+## 实测范围与结果
+
+使用当前 Codex CLI 官方登录、产品相同的独立无工具调用方式及低思考强度；没有切换模型或开启付费加速档。题目为“ssrt来测量抑制控制可靠吗”。全库为 50 篇样例 MD；单篇为样例第 50 篇关于抑制测量可靠性的论文。每个范围实测三次，均完成 JSON 回答、来源编号与三个追问。
+
+| 范围/状态 | 原文检索 | Codex 最终回答 | 合计 |
+| --- | ---: | ---: | ---: |
+| 全部 50 篇，空用户向量缓存/冷模型 | 1.76 秒 | 14.05 秒 | 15.82 秒 |
+| 全部 50 篇，再次提问 | 0.47 秒 | 14.01 秒 | 14.48 秒 |
+| 全部 50 篇，第三次 | 0.45 秒 | 12.90 秒 | 13.35 秒 |
+| 单篇，首次（全库问题之后） | 0.032 秒 | 13.50 秒 | 13.54 秒 |
+| 单篇，第二次 | 0.031 秒 | 14.33 秒 | 14.36 秒 |
+| 单篇，第三次 | 0.027 秒 | 13.68 秒 | 13.70 秒 |
+
+这是检索开始到 CLI 返回完整答案的后端实测，不含页面加载、从磁盘首次读取 MD、前端轮询显示及其他用户任务排队。单篇首次一行并不是独立冷启动。一次请求首次读取全部源文档与桌面 UI 的额外时间应另计，不能把这些数字视作端到端 SLA。
+
+本次全库问题的后端三次均低于 20 秒；**单篇 5 秒目标尚未达到**。单篇本地检索约 30 毫秒，大部分用时来自外部模型启动、网络、推理与最终输出。没有用预设答案或未经核验的内容冒充更快的模型回答，也未重现用户之前安装版的 232 秒运行，因此不据此计算同条件加速百分比。
+
+## 检索质量检查
+
+曾测试过限制向量候选数量的加速方案，但它丢失了大量精确事实和比较题证据，已撤回，不包含在当前版本。
+
+对原有 69 个可回答回归问题，复用冻结的模型改写结果重新运行当前检索，恢复 84/89 个标准证据单元（94.38%），与此前检索回放相同。仍有缺失的题号：C03、C04、C06、C16、C18。此检查仅验证检索未退化，**不是重新测得的答案准确率，也不覆盖所有短概念问题**。不能将原来完整评测的答案准确率直接当作本次所有快速问题的准确率。
+
+六条 SSRT 实际回答均区分了单次内部一致性与跨时间重测可靠性，使用所提供的原文证据编号，并单独标记推断。其他未预先向量化的用户文献仍可能需要首次编码时间；精确事实、比较及专家模式仍可能多于一次模型调用。
+
+## Reproduction and scope (English)
+
+`tests/benchmarks/research-latency.mjs` runs six real Codex requests against the bundled MD corpus with a fresh user-vector cache. The sample's precomputed passages remain available. `--retrieval-only` replays frozen query plans against the existing gold set; it does not call an answer model or measure answer accuracy. Reports are written to isolated, ignored output directories.
+
+All-paper backend latency was 13.35–15.82 seconds; single-paper latency was 13.54–14.36 seconds after the model had loaded. These are limited local measurements, not a five-second or twenty-second service guarantee. Existing credentials, documents and conversations are preserved.

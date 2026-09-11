@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { localService } from './local-service.js';
 const testRoot = await mkdtemp(path.join(tmpdir(), 'litgraph-empty-library-test-'));
-const middleware = localService(testRoot);
+const middleware = localService(testRoot,{embed:async(texts,kind)=>{assert.equal(kind,'query');return texts.map(()=>[1,0]);}});
 const server = http.createServer((req, res) => middleware(req, res, () => { res.statusCode = 404; res.end(); }));
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const base = `http://127.0.0.1:${server.address().port}`;
@@ -17,9 +17,12 @@ async function call(route, body, token, method = body ? 'POST' : 'GET') {
 }
 try {
   const { data: b } = await call('bootstrap', {});
+  assert.deepEqual((await call('embeddings',{texts:['retrieval fixture'],kind:'query'},b.browserToken)).data.vectors,[[1,0]]);
+  assert.equal((await call('embeddings',{texts:['fixture'],kind:'query'},'invalid')).code,401);
   assert.equal((await call('document', { node: { id: 'missing' } }, b.browserToken)).data, null);
   assert.equal((await call('original', { id: 'missing' }, b.browserToken)).data, null);
   const { data: config } = await call('instructions', {}, b.browserToken);
+  assert.equal((await call('embeddings',{texts:['fixture'],kind:'query'},config.token)).code,403);
   const tool = (name, args = {}) => call('agent', { name, arguments: args }, config.token);
   assert.equal((await call('status', null, b.browserToken)).data.connected, false);
   const connectedAgent=(await tool('litgraph_connect', { model: 'Test Agent' })).data;

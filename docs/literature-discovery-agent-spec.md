@@ -1,6 +1,6 @@
 # 文献发现：检索、下载与 AI 结构化协议
 
-LitGraph 1.1.8。实际协议以 `src/discovery-contract.js` 为准；数据库适配见 `scripts/scholarly-service.js`，本地文件服务见 `scripts/local-service.js`，原文分析校验见 `src/paper-analysis.js`。
+LitGraph 1.2.0。实际协议以 `src/discovery-contract.js` 为准；数据库适配见 `scripts/scholarly-service.js`，本地文件服务见 `scripts/local-service.js`，原文分析校验见 `src/paper-analysis.js`。
 
 ## 1. 当前接通的流程
 

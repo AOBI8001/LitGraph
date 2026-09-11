@@ -10,6 +10,7 @@ import {
   interpolateRgb
 } from 'd3';
 import sampleProjectSource from 'virtual:litgraph-sample';
+import { refreshSampleNodes } from './sample-corpus.js';
 import { version as APP_VERSION } from '../package.json';
 import { initialWorkspace } from './startup-project.js';
 import { preferenceKeys } from './settings-reset.js';
@@ -31,6 +32,8 @@ import { shouldRefreshLocalMetadata } from './local-metadata.js';
 import { messageMarkdown } from './message-markdown.js';
 import { selectEvidence } from './research-evidence.js';
 import { validateEvidenceAnswer } from './research-evidence.js';
+import { evidenceLocations } from './research-evidence.js';
+import { planResearchQuery, quickQueryPlan, needsModelQueryPlan, retrievalPolicy } from './research-query.js';
 import { linkMatchesSelection } from './graph-focus.js';
 import { CANVAS_BACKGROUNDS, backgroundPreset, backgroundArtwork } from './canvas-backgrounds.js';
 import { captureStaticUI } from './static-ui-language.js';
@@ -78,6 +81,7 @@ const MODEL_CATALOG = {
   'qwen3-coder-next': { provider: 'qwen', endpoint: 'https://dashscope.aliyuncs.com/compatible-mode/v1', protocol: 'openai-chat' },
   'deepseek-v4-pro': { provider: 'deepseek', endpoint: 'https://api.deepseek.com', protocol: 'openai-chat' },
   'deepseek-v4-flash': { provider: 'deepseek', endpoint: 'https://api.deepseek.com', protocol: 'openai-chat' },
+  'deepseek-flash': { provider: 'deepseek', endpoint: 'https://api.deepseek.com', protocol: 'openai-chat' },
   'doubao-seed-2-1-pro-260628': { provider: 'doubao', endpoint: 'https://ark.cn-beijing.volces.com/api/v3', protocol: 'openai-chat' },
   'doubao-seed-2-1-turbo': { provider: 'doubao', endpoint: 'https://ark.cn-beijing.volces.com/api/v3', protocol: 'openai-chat' },
   'doubao-seed-evolving': { provider: 'doubao', endpoint: 'https://ark.cn-beijing.volces.com/api/v3', protocol: 'openai-chat' }
@@ -88,7 +92,7 @@ const MODEL_GROUPS = [
   ['Kimi', ['kimi-k3', 'kimi-k2.6', 'kimi-k2.7-code']],
   ['Zhipu / GLM', ['glm-5.3', 'glm-5.3-flash']],
   ['Qwen', ['qwen3.8-max', 'qwen3.7-plus', 'qwen3.7-flash', 'qwen3-coder-next']],
-  ['DeepSeek', ['deepseek-v4-pro', 'deepseek-v4-flash']],
+  ['DeepSeek', ['deepseek-flash', 'deepseek-v4-pro', 'deepseek-v4-flash']],
   ['Doubao', ['doubao-seed-2-1-pro-260628', 'doubao-seed-2-1-turbo', 'doubao-seed-evolving']]
 ];
 const MODEL_NAMES = {
@@ -99,6 +103,7 @@ const MODEL_NAMES = {
   'kimi-k3': 'Kimi K3', 'kimi-k2.6': 'Kimi K2.6',
   'qwen3.8-max': 'Qwen 3.8 Max', 'qwen3.7-plus': 'Qwen 3.7 Plus', 'qwen3.7-flash': 'Qwen 3.7 Flash', 'qwen3-coder-next': 'Qwen3 Coder Next',
   'deepseek-v4-pro': 'DeepSeek V4 Pro', 'deepseek-v4-flash': 'DeepSeek V4 Flash',
+  'deepseek-flash': 'DeepSeek V4.1 Flash',
   'doubao-seed-2-1-pro-260628': 'Doubao Seed 2.1 Pro', 'doubao-seed-2-1-turbo': 'Doubao Seed 2.1 Turbo', 'doubao-seed-evolving': 'Doubao Seed Evolving'
 };
 const MODEL_OPTIONS = `${MODEL_GROUPS.map(([label, ids]) => `<optgroup label="${label}">${ids.map((id) => `<option value="${id}">${MODEL_NAMES[id] || id}</option>`).join('')}</optgroup>`).join('')}<option value="custom">自定义</option>`;
@@ -275,14 +280,14 @@ app.innerHTML = `
         <header><div><h2 id="api-dialog-title">模型接入</h2><p>连接外部 Agent 或模型 API，开始检索与研究。</p></div><button type="button" data-close-modal="api" aria-label="关闭">×</button></header>
         <form id="api-form">
           <section class="external-agent-section" aria-labelledby="external-agent-label">
-            <h3 id="external-agent-label">方式1：外部 Agent <span>例如 Codex · Claude Code 等</span></h3>
+            <h3 id="external-agent-label">方式2：外部 Agent <span>例如 Codex · Claude Code 等</span></h3>
             <p class="external-agent-help">登录官方 Codex或 Claude Code。点击连结并验证。连接成功后，检索、论文分析和研究问答会按需调用。</p>
             <div class="external-agent-row agent-runtime-controls"><select id="agent-runtime-provider" aria-label="外部 Agent 工具"><option value="codex">Codex CLI</option><option value="claude">Claude Code</option></select><button id="connect-agent-runtime" type="button">连结并验证</button><button id="choose-agent-runtime" type="button">选择程序</button></div>
             <details class="manual-agent-access"><summary>其他工具：手动 MCP 接入</summary><div class="external-agent-row"><p>仅用于能持续处理 MCP 任务的工具；普通 MCP 连接无法自动唤醒聊天会话。</p><button id="copy-agent-instructions" type="button">复制文本</button></div></details>
             <div class="external-agent-status" id="external-agent-status" role="status"></div>
             <button id="disconnect-agent" type="button" hidden>断开外部 Agent</button>
           </section>
-          <div class="connection-method-heading"><h3 class="connection-method-title">方式2：API</h3><button id="delete-api-config" type="button">删除该配置</button></div>
+          <div class="connection-method-heading"><h3 class="connection-method-title">方式1：API</h3><button id="delete-api-config" type="button">删除该配置</button></div>
           <p class="api-provider-help">支持 OpenAI、Claude、智谱、Kimi、Qwen、DeepSeek 与豆包。密钥仅保存在当前设备。</p>
           <label for="api-endpoint">API 地址 (Base URL)</label><input id="api-endpoint" name="endpoint" type="url" autocomplete="off" spellcheck="false" required aria-describedby="api-error" value="">
           <label for="api-key">API Key</label><div class="secret-input"><input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" required aria-describedby="api-error"><button id="toggle-api-key" type="button" aria-label="显示 API Key" aria-pressed="false">显示</button></div>
@@ -319,6 +324,14 @@ app.innerHTML = `
   </main>
 `;
 
+// Keep keyboard traversal in the same order as the two connection methods.
+app.querySelector('#api-form').append(app.querySelector('.external-agent-section'));
+const repositoryLink = document.createElement('a');
+repositoryLink.href = 'https://github.com/AOBI8001/LitGraph';
+repositoryLink.textContent = repositoryLink.href;
+repositoryLink.target = '_blank';
+repositoryLink.rel = 'noopener noreferrer';
+app.querySelector('.about-content p:last-child').append(' ', repositoryLink);
 app.querySelectorAll('svg').forEach((icon) => icon.setAttribute('aria-hidden', 'true'));
 const translateStaticUI = captureStaticUI(app);
 
@@ -406,6 +419,7 @@ function createSampleProject() {
 }
 let projectLibrary = {};
 try { projectLibrary = JSON.parse(localStorage.getItem(PROJECT_LIBRARY_KEY) || '{}') || {}; } catch { projectLibrary = {}; }
+for (const entry of Object.values(projectLibrary)) if (entry?.data?.nodes) entry.data = refreshSampleNodes(entry.data, sampleProjectSource);
 const initial = initialWorkspace(projectLibrary, localStorage.getItem(ACTIVE_PROJECT_KEY), createSampleProject(), localStorage.getItem('litgraph.language') || 'zh');
 projectLibrary = initial.library;
 let currentProjectId = initial.activeId;
@@ -655,7 +669,7 @@ function openModal(id) {
   modal.hidden = false;
   if (id === 'api') {
     document.querySelector('#api-vision').checked = aiConfig?.vision === true;
-    document.querySelector('#api-endpoint').value = aiConfig?.endpoint || '';
+    document.querySelector('#api-endpoint').value = aiConfig?.endpoint || (aiConfig?.model ? '' : 'https://api.deepseek.com');
     const keyInput = document.querySelector('#api-key');
     const keyToggle = document.querySelector('#toggle-api-key');
     keyInput.value = aiConfig?.apiKey || '';
@@ -664,7 +678,7 @@ function openModal(id) {
     keyToggle.setAttribute('aria-label', panelText('显示 API Key', 'Show API key'));
     keyToggle.setAttribute('aria-pressed', 'false');
     const known = Object.keys(MODEL_CATALOG);
-    document.querySelector('#api-model').value = known.includes(aiConfig?.model) ? aiConfig.model : aiConfig?.model ? 'custom' : 'gpt-5.6-terra';
+    document.querySelector('#api-model').value = known.includes(aiConfig?.model) ? aiConfig.model : aiConfig?.model ? 'custom' : 'deepseek-flash';
     document.querySelector('#custom-model').hidden = document.querySelector('#api-model').value !== 'custom';
     document.querySelector('#custom-model').value = known.includes(aiConfig?.model) ? '' : (aiConfig?.model || '');
     document.querySelector('#api-error').hidden = true;
@@ -700,8 +714,9 @@ function isNodeVisible(node) {
   if (filterState.yearStart && Number(node.year) < Number(filterState.yearStart)) return false;
   if (filterState.yearEnd && Number(node.year) > Number(filterState.yearEnd)) return false;
   if (filterState.journals.length && !filterState.journals.includes(node.journal)) return false;
-  if (filterState.fulltext === 'yes' && !node.hasPdf) return false;
-  if (filterState.fulltext === 'no' && node.hasPdf) return false;
+  const hasLocalText = Boolean(node.hasPdf || node.sampleMarkdown || node.fulltextStatus?.startsWith('indexed'));
+  if (filterState.fulltext === 'yes' && !hasLocalText) return false;
+  if (filterState.fulltext === 'no' && hasLocalText) return false;
   return true;
 }
 
@@ -1931,6 +1946,10 @@ function paperSource(node) {
 
 async function openPaper(node) {
   try {
+    if (node.sampleMarkdown && !node.hasPdf && !node.originalRelativePath) {
+      toast(panelText('样例包含 MD 原文，可直接提问；未附带 PDF 文件。', 'The sample includes Markdown for questions, but no PDF file.'));
+      return;
+    }
     if (!node.fulltextKey && node.fulltextStorageKey) {
       const document = await getFulltext(node);
       if (document) { await saveFulltext(currentProjectId, node, document); saveCurrentProject(); }
@@ -2137,7 +2156,7 @@ function ensureResearchTab(node = null) {
 
 function researchRunText(run) {
   const elapsed = formatResearchDuration(run.elapsed(), language);
-  if (run.status === 'pending') return panelText(`正在处理 · 已用时 ${elapsed}`, `Processing · ${elapsed} elapsed`);
+  if (run.status === 'pending') { const labels={preparing:['准备请求','Preparing'],rewriting:['改写检索问题','Planning retrieval'],loading:['读取原文','Reading sources'],retrieving:['检索原文证据','Retrieving evidence'],generating:['等待模型回答','Waiting for model']}; const pair=labels[run.stage]||labels.preparing; return `${panelText(...pair)} · ${elapsed}`; }
   if (run.status === 'paused') return panelText(`已在 ${elapsed}后停止。`, `Stopped after ${elapsed}.`);
   if (run.status === 'error') return panelText(`无法完成分析：${localizedError(run.error, language)}`, `Analysis failed: ${localizedError(run.error, language)}`);
   return run.result?.answer || '';
@@ -2192,8 +2211,9 @@ function updateResearchSendButton(element, chatKey) {
 function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode = 'quick') {
   const config = activeAIConfig();
   const mode = normalizeResearchMode(requestedMode);
-  const run = new ResearchRequest(async signal => {
-    const { messages: requestMessages, evidence } = await buildMessages(signal, config, mode);
+  const run = new ResearchRequest(async (signal, onStage) => {
+    const { messages: requestMessages, evidence } = await buildMessages(signal, config, mode, onStage);
+    onStage('generating');
     let answer;
     try { answer = await callAI(requestMessages, config, researchTokenBudget(config, mode), { signal, json: true, researchMode: mode }); }
     catch (error) {
@@ -2204,7 +2224,7 @@ function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode
     if (!parsed || typeof parsed.answer !== 'string' || !parsed.answer.trim() || !Array.isArray(parsed.suggested_followups)) throw new Error(panelText('模型已返回内容，但未按要求提供 JSON 回答和三个后续问题；请重试', 'The model replied, but did not provide the required JSON answer and three follow-up questions. Retry.'));
     const followups = [...new Set(parsed.suggested_followups.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean))];
     if (followups.length !== 3 || followups.some(item => item.length > 160)) throw new Error(panelText('模型返回的后续问题格式不正确，请重试', 'Invalid follow-up question format. Retry.'));
-    return { answer: parsed.answer, suggested_followups: followups, sources: validateEvidenceAnswer(parsed.answer, evidence) };
+    return { answer: evidenceLocations(parsed.answer,evidence,language), suggested_followups: followups, sources: validateEvidenceAnswer(parsed.answer, evidence) };
   }, (state, event) => {
     if (researchRequests.get(chatKey) !== state) return;
     const windowMatches = deepReadWindow?.isConnected && deepReadWindow.dataset.chatKey === chatKey;
@@ -2221,6 +2241,7 @@ function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode
       message.status = state.status;
       message.text = researchRunText(state);
       message.elapsedMs = state.elapsed();
+      message.stageTimings = {...state.timings};
       message.responseMode = mode;
       message.suggested_followups = state.status === 'done' ? state.result.suggested_followups : [];
       message.sources = state.status === 'done' ? state.result.sources : [];
@@ -2256,8 +2277,11 @@ function submitResearchQuestion(element, tab, chatKey) {
   if (attachments.some(a => a.image) && activeAIConfig().vision !== true) return showResearchNotice(panelText('当前模型未启用图片输入。请移除图片，或在模型接入中确认该模型支持图片后再发送。', 'Image input is not enabled. Remove the image, or confirm this model supports images in Model connection before sending.'));
   const requestedMode = normalizeResearchMode(element.querySelector('#research-response-mode').value);
   recordUse('question');
-  const buildMessages = async (signal, config, mode) => {
-    const context = await prepareEvidence(scopedNodes, question, attachments, signal, researchModePolicy(mode).evidenceBudget);
+  const buildMessages = async (signal, config, mode, onStage) => {
+    onStage(mode === 'expert' || needsModelQueryPlan(question,scopedNodes,priorMessages) ? 'rewriting' : 'preparing');
+    const plan = mode === 'quick' && !needsModelQueryPlan(question,scopedNodes,priorMessages) ? quickQueryPlan(question, priorMessages) : await planResearchQuery(question,{history:priorMessages,nodes:scopedNodes,signal,identity:JSON.stringify([config.provider,config.model,config.endpoint]),generate:messages=>callAI(messages,config,1500,{json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(45000)])})});
+    const context = await prepareEvidence(scopedNodes, question, attachments, signal, retrievalPolicy(plan,scopedNodes.length,mode).budget,plan,{topK:retrievalPolicy(plan,scopedNodes.length,mode).topK,onStage});
+    if (context.retrieval?.warning || plan.degraded) toast(panelText('部分检索增强不可用，本次使用可用检索路径。','Some retrieval enhancements are unavailable; using available search paths.'));
     const textMessages = researchMessages(scopedNodes, priorMessages, question, context, mode);
     return { messages: withImages(textMessages, attachments.filter(a => a.image).map(a => a.image), config.protocol || 'openai-chat'), evidence: context.evidence };
   };
@@ -2475,11 +2499,11 @@ function renderInspector(node) {
       <p class="paper-authors">${escapeHtml(node.authors.join(', '))}</p>
       <a class="paper-doi" href="${escapeHtml(paperSource(node))}" target="_blank" rel="noreferrer">${escapeHtml(node.doi || node.url || panelText('无 DOI / URL', 'No DOI / URL'))}</a>
       <div class="paper-actions">
-        <button id="open-pdf-button" type="button"><span class="action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"><path d="M7 3.5h7l3 3V20H7z"/><path d="M14 3.5V7h3M10 11h4M10 14h4"/></svg></span><b>${panelText('原文', 'Full text')}</b></button>
+        <button id="open-pdf-button" type="button" ${node.sampleMarkdown && !node.hasPdf && !node.originalRelativePath ? `disabled title="${panelText('样例仅附带 MD，未附带 PDF', 'Sample includes Markdown, not PDF')}"` : ''}><span class="action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"><path d="M7 3.5h7l3 3V20H7z"/><path d="M14 3.5V7h3M10 11h4M10 14h4"/></svg></span><b>${panelText('原文', 'Full text')}</b></button>
         <button id="ask-paper-button" type="button"><span class="action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"><circle cx="11" cy="11" r="7"/><path d="m16.2 16.2 4.3 4.3M8.5 9h5M8.5 12h3.5"/></svg></span><b>${panelText('探索', 'Explore')}</b></button>
         <button id="citation-button" type="button" aria-expanded="false"><span class="action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"><path d="M5 7.5h5v5H7.5A3.5 3.5 0 0 1 4 16M14 7.5h5v5h-2.5A3.5 3.5 0 0 1 13 16"/></svg></span><b>${panelText('引用', 'Cite')}</b></button>
       </div>
-      <p class="paper-fulltext-status" title="${escapeHtml(node.fulltextError||'')}">${node.fulltextStatus==='indexed'?panelText('原文索引已保存至本地','Full-text index saved locally'):node.fulltextStatus==='indexed_browser_only'?panelText('原文已索引 · 仅浏览器保存，请导出备份','Indexed in this browser only; export a backup'):node.originalRelativePath?panelText('PDF 已保存 · 原文尚需转换 / OCR','PDF saved · text extraction / OCR needed'):panelText('原文未索引 · 可将 PDF 拖入研究空间补充','Full text not indexed · add a PDF in Research space')}</p>
+      <p class="paper-fulltext-status" title="${escapeHtml(node.fulltextError||'')}">${node.sampleMarkdown && !node.hasPdf?panelText('样例已附带 MD 原文 · 可直接提问 · 未附带 PDF','Sample Markdown available · ready for questions · PDF not included'):node.fulltextStatus==='indexed'?panelText('原文索引已保存至本地','Full-text index saved locally'):node.fulltextStatus==='indexed_browser_only'?panelText('原文已索引 · 仅浏览器保存，请导出备份','Indexed in this browser only; export a backup'):node.originalRelativePath?panelText('PDF 已保存 · 原文尚需转换 / OCR','PDF saved · text extraction / OCR needed'):panelText('原文未索引 · 可将 PDF 拖入研究空间补充','Full text not indexed · add a PDF in Research space')}</p>
       ${!node.hasPdf?`<button id="institution-paper-button" class="paper-process-action" type="button">${panelText('通过机构获取原文','Get full text through institution')}</button>`:''}
       <div class="citation-panel" id="citation-panel" hidden>
         <label>${panelText('参考文献格式', 'Citation style')}<select id="citation-style"><option value="apa" ${savedStyle === 'apa' ? 'selected' : ''}>APA 7</option><option value="chicago" ${savedStyle === 'chicago' ? 'selected' : ''}>Chicago</option><option value="harvard" ${savedStyle === 'harvard' ? 'selected' : ''}>Harvard</option><option value="mla" ${savedStyle === 'mla' ? 'selected' : ''}>MLA 9</option>${language === 'zh' ? `<option value="gbt" ${savedStyle === 'gbt' ? 'selected' : ''}>GB/T 7714—2015</option>` : ''}</select></label>
@@ -2703,7 +2727,7 @@ function renderSecondaryPanel() {
       <button type="button" data-workspace-action="data-folder"><span><strong>${panelText('数据文件夹', 'Data folder')}</strong><small>${panelText('原文、MD、分析与项目数据', 'Originals, Markdown, analysis and project data')}</small></span></button>
       <p>${panelText('连接与应用', 'Connections & app')}</p>
       <button type="button" data-workspace-action="api"><span><strong>${panelText('模型接入', 'AI connection')}</strong><small>${panelText('配置模型、API 地址与密钥', 'Configure model, API URL and key')}</small></span></button>
-      <a href="https://github.com/" target="_blank" rel="noreferrer"><span><strong>GitHub</strong><small>${panelText('查看项目地址', 'Open project repository')}</small></span></a>
+      <a href="https://litgraph.aobi.qzz.io/" target="_blank" rel="noopener noreferrer"><span><strong>${panelText('产品网站', 'Product website')}</strong><small>${panelText('了解产品与下载使用', 'Explore LitGraph and download the app')}</small></span></a>
       <button type="button" data-workspace-action="about"><span><strong>${panelText('关于 LitGraph', 'About LitGraph')}</strong><small>Version ${APP_VERSION}</small></span></button>
       <a href="https://my.feishu.cn/share/base/form/shrcnbw8bQOlnsv8EXdKFaXnoIy" target="_blank" rel="noopener noreferrer"><span><strong>${panelText('用户反馈', 'User feedback')}</strong><small>${panelText('反馈问题或分享使用建议', 'Report an issue or share a suggestion')}</small></span></a>
       <button type="button" data-workspace-action="reset-settings"><span><strong>${panelText('还原所有设置', 'Reset all settings')}</strong><small>${panelText('清除连接和界面设置，保留全部研究数据', 'Reset connections and preferences; keep all research data')}</small></span></button>
@@ -2885,7 +2909,7 @@ function renderDataView() {
     </header>
     <div class="data-table-wrap"><table class="data-table">
       ${dataColgroup(dataEntity)}
-      ${dataEntity === 'nodes' ? `<thead><tr>${resizableHeader('select', `<input id="select-all-data" type="checkbox" aria-label="${panelText('全选节点', 'Select all nodes')}" ${allSelected ? 'checked' : ''}>`, 'check-cell')}${resizableHeader('preview', 'Preview', 'preview-cell')}${resizableHeader('id', 'ID')}${resizableHeader('title', panelText('标题', 'Title'))}${resizableHeader('year', panelText('年份', 'Year'))}${resizableHeader('articleType', panelText('文章类型', 'Type'))}${resizableHeader('journal', panelText('期刊', 'Journal'))}${resizableHeader('citations', panelText('引用量', 'Citations'))}${resizableHeader('fulltext', panelText('本地原文', 'Full text'))}${resizableHeader('read', panelText('已读', 'Read'))}${resizableHeader('theory', panelText('主要理论', 'Primary theory'))}</tr></thead>
+      ${dataEntity === 'nodes' ? `<thead><tr>${resizableHeader('select', `<input id="select-all-data" type="checkbox" aria-label="${panelText('全选节点', 'Select all nodes')}" ${allSelected ? 'checked' : ''}>`, 'check-cell')}${resizableHeader('preview', 'Preview', 'preview-cell')}${resizableHeader('id', 'ID')}${resizableHeader('title', panelText('标题', 'Title'))}${resizableHeader('year', panelText('年份', 'Year'))}${resizableHeader('articleType', panelText('文章类型', 'Type'))}${resizableHeader('journal', panelText('期刊', 'Journal'))}${resizableHeader('citations', panelText('引用量', 'Citations'))}${resizableHeader('fulltext', panelText('本地 PDF', 'Local PDF'))}${resizableHeader('read', panelText('已读', 'Read'))}${resizableHeader('theory', panelText('主要理论', 'Primary theory'))}</tr></thead>
         <tbody>${nodes.map((node) => `<tr><td class="check-cell"><input type="checkbox" aria-label="${escapeHtml(`${panelText('选择', 'Select')} ${node.title}`)}" data-select-record="${escapeHtml(node.id)}" ${dataSelection.has(node.id) ? 'checked' : ''}></td><td class="preview-cell"><i class="node-preview" style="background:${nodeFill(node)}"></i></td><td class="mono">${escapeHtml(node.id)}</td><td>${editableCell(node.id, 'title', node.title)}</td><td>${editableCell(node.id, 'year', node.year, 'number')}</td><td>${editableCell(node.id, 'articleType', node.articleType)}</td><td>${editableCell(node.id, 'journal', node.journal)}</td><td>${editableCell(node.id, 'citations', node.citations, 'number')}</td><td class="center-cell">${editableCell(node.id, 'hasPdf', node.hasPdf, 'checkbox')}</td><td class="center-cell">${editableCell(node.id, 'read', node.read, 'checkbox')}</td><td><select aria-label="${escapeHtml(`${node.id} primary theory`)}" data-edit-id="${escapeHtml(node.id)}" data-edit-field="primaryTheory">${project.theories.map((theory) => `<option value="${escapeHtml(theory.id)}" ${node.primaryTheory === theory.id ? 'selected' : ''}>${escapeHtml(language === 'en' ? (theory.labelEn || theory.label) : theory.label)}</option>`).join('')}</select></td></tr>`).join('')}</tbody>`
         : `<thead><tr>${resizableHeader('select', `<input id="select-all-data" type="checkbox" aria-label="${panelText('全选边', 'Select all edges')}" ${allSelected ? 'checked' : ''}>`, 'check-cell')}${resizableHeader('id', 'ID')}${resizableHeader('source', panelText('源节点', 'Source'))}${resizableHeader('target', panelText('目标节点', 'Target'))}${resizableHeader('relation', panelText('关系', 'Relation'))}${resizableHeader('strength', panelText('强度', 'Strength'))}</tr></thead>
         <tbody>${project.semanticLinks.map((link) => `<tr><td class="check-cell"><input type="checkbox" aria-label="${escapeHtml(`${panelText('选择', 'Select')} ${link.id}`)}" data-select-record="${escapeHtml(link.id)}" ${dataSelection.has(link.id) ? 'checked' : ''}></td><td class="mono">${escapeHtml(link.id)}</td><td>${editableCell(link.id, 'source', endpointId(link.source))}</td><td>${editableCell(link.id, 'target', endpointId(link.target))}</td><td><select aria-label="${escapeHtml(`${link.id} relation`)}" data-edit-id="${escapeHtml(link.id)}" data-edit-field="relation">${['support','oppose','related'].map((relation) => `<option value="${relation}" ${link.relation === relation ? 'selected' : ''}>${t(relation)}</option>`).join('')}</select></td><td>${editableCell(link.id, 'strength', link.strength, 'number')}</td></tr>`).join('')}</tbody>`}
@@ -3120,6 +3144,7 @@ function applyLanguage() {
   document.documentElement.lang = language === 'zh' ? 'zh-CN' : 'en';
   localStorage.setItem('litgraph.language', language);
   translateStaticUI(language);
+  updateWindowControl();
   const keyVisible = document.querySelector('#api-key').type === 'text';
   const keyToggle = document.querySelector('#toggle-api-key');
   keyToggle.textContent = keyVisible ? panelText('隐藏', 'Hide') : panelText('显示', 'Show');
@@ -3467,7 +3492,7 @@ function activateProjectData(candidate, id = candidate.meta?.id || `project-${Da
   discoveryNotice='';discoveryProgress='';pendingInstitutionNode=null;expandedHistoryJobs.clear();
   validateImportedProject(candidate);
   simulation.stop();
-  project = JSON.parse(JSON.stringify(candidate));
+  project = refreshSampleNodes(JSON.parse(JSON.stringify(candidate)), sampleProjectSource);
   currentProjectId = id;
   project.meta ??= { title: panelText('导入的 LitGraph 项目', 'Imported LitGraph project'), mock: false };
   project.meta.id = id;
@@ -4926,11 +4951,24 @@ document.querySelector('#window-minimize').addEventListener('click', (event) => 
   event.currentTarget.setAttribute('aria-pressed', String(minimized));
   event.currentTarget.setAttribute('aria-label', panelText(minimized ? '恢复窗口' : '最小化窗口', minimized ? 'Restore window' : 'Minimize window'));
 });
-document.querySelector('#window-maximize').addEventListener('click', async (event) => {
+let desktopWindowState = { maximized: false, fullscreen: false };
+function updateWindowControl() {
+  const expanded = desktop ? desktopWindowState.maximized || desktopWindowState.fullscreen : Boolean(document.fullscreenElement);
+  const button = document.querySelector('#window-maximize');
+  button.innerHTML = `<svg viewBox="0 0 12 12" aria-hidden="true">${expanded ? '<path d="M4.5 3V1.5h6v6H9"/><rect x="1.5" y="4.5" width="6" height="6"/>' : '<rect x="2.5" y="2.5" width="7" height="7"/>'}</svg>`;
+  const label = expanded ? panelText('还原窗口', 'Restore window') : panelText('最大化窗口', 'Maximize window');
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.setAttribute('aria-pressed', String(expanded));
+}
+desktop?.onWindowState?.(state => { desktopWindowState = state; updateWindowControl(); });
+desktop?.windowState?.().then(state => { desktopWindowState = state; updateWindowControl(); }).catch(() => {});
+document.addEventListener('fullscreenchange', updateWindowControl);
+document.querySelector('#window-maximize').addEventListener('click', async () => {
   if (desktop) return void desktop.control('maximize');
   if (document.fullscreenElement) await document.exitFullscreen().catch(() => {});
   else await document.documentElement.requestFullscreen?.().catch(() => {});
-  event.currentTarget.setAttribute('aria-pressed', String(Boolean(document.fullscreenElement)));
+  updateWindowControl();
 });
 document.querySelector('#window-close').addEventListener('click', () => desktop ? void desktop.control('close') : toast(panelText('当前为网页预览；桌面版本将在此处关闭窗口', 'This is the web preview; the desktop build will close here')));
 document.querySelector('#research-desk-entry').addEventListener('click', () => {
