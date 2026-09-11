@@ -1,27 +1,41 @@
-# LitGraph 1.0
+# LitGraph 1.2.0
 
 [中文使用说明](README.md) · [English guide](README.en.md)
 
-## 📦 中文
+## 中文
 
-Windows x64 安装包：`LitGraph-Setup-1.0.0-x64.exe`。支持 Windows 10 / 11；无需另装 Node.js 或 Python。首次打开为空白项目，可选择模型接入或载入 50 篇样例论文。
+下载 **`LitGraph-Setup-1.2.0-x64.exe`**，适用于 Windows 10 / 11 x64，无需另装 Node.js 或 Python。运行安装程序即可安装或升级；升级保留已有研究数据，建议提前备份重要项目与原文。
 
-- 文献发现：5–100 篇检索数量、真实学术来源、语言与类型筛选、确认导入、合法开放 PDF 下载和 Markdown 原文索引。
-- 研究空间：按论文范围问答、快速 / 专家偏好、回车发送、取消 / 重新提交、原文片段检索和具体追问。
-- 可视化：观点图、年份树、2D / 3D、理论及语义布局，保留样例理论颜色。
-- 桌面能力：原生窗口控制、独立本地数据、加密 API 配置、内置 MCP 适配器运行环境。
-- 基础统计：首次使用、每日活跃安装、打开与核心操作次数；可在“关于 LitGraph”关闭。
+### 本版更新
 
-本版本未签名，可能出现 Windows 未知发布者 / SmartScreen 提示。只从本仓库下载并核验 `SHA256SUMS.txt`；校验和不代替签名，不建议关闭系统防护。
+- 模型接入调整为方式 1：API，方式 2：外部 Agent；初次配置默认显示 DeepSeek V4.1 Flash，保留已有配置。
+- 研究空间支持段落与章节感知分块、多查询及两层关键词、关键词与本地多语言向量混合检索，以及原文位置溯源。优化快速问答的检索、缓存和模型调用开销。
+- 文献发现支持开放获取、开放获取与机构联合、机构访问三种来源；机构通道为 Beta，遇到验证交给用户处理，超时或封锁可跳过。
+- 保留 2D / 3D 理论及语义图谱、年份树、筛选、数据表和项目内研究对话。
+- 设置提供产品网站入口，关于页面提供 GitHub 链接；窗口最大化与还原图标跟随实际窗口状态。
+- 更新中英文使用说明，加入 8 张功能展示图；扩展使用统计的周活、月活、首日激活和回访指标，沿用原有最小化事件字段。
 
-已知边界：无内置 OCR、无自动更新、不共享机构 Cookie、不保证每条记录能取得全文。使用远程模型需要自己的访问权限及额度。普通卸载保留用户数据；项目 JSON 不等于完整原文备份。
+### 安装与边界
 
-## 📦 English
+安装包未代码签名，Windows 可能提示未知发布者或 SmartScreen 警告。请从本仓库下载并比对 `SHA256SUMS.txt`；校验和不代替签名，请保留系统安全防护。
 
-Download `LitGraph-Setup-1.0.0-x64.exe` for Windows 10 / 11 x64. No separate Node.js or Python is required. Start with a blank project, connect AI or load the optional 50-paper sample.
+远程模型需要用户自己的账号、API 权限或额度。回答耗时受模型和网络影响，不承诺固定响应时间。机构登录不代表所有论文均可获取，下载与验证仍受出版商政策限制。论文原文与模型输出应由用户核对；软件的 MIT 许可不改变第三方论文或模型的许可。
 
-Features include real-source scholarly discovery (5–100 records), reviewed imports, lawful open-PDF acquisition and local Markdown indexing; scoped evidence-grounded research with Quick / Expert preferences, Enter-to-send, cancellation and follow-ups; 2D / 3D viewpoint graphs and year trees; encrypted desktop model configuration and a bundled MCP adapter runtime. Basic installation and usage statistics can be disabled under About LitGraph.
+## English
 
-This version is unsigned. Windows may show unknown-publisher or SmartScreen warnings. Download only from this repository and compare `SHA256SUMS.txt`; hashes do not replace signing, and disabling system protection is not recommended.
+Download **`LitGraph-Setup-1.2.0-x64.exe`** for Windows 10 / 11 x64. No separate Node.js or Python installation is required. Run the installer to install or upgrade. Existing research data is preserved; back up important projects and originals first.
 
-Known limitations: no built-in OCR, automatic updater or institution-cookie sharing; full text is not guaranteed. Remote AI needs your own access and quota. Normal uninstall preserves user data; project JSON is not a complete original-file backup.
+### Highlights
+
+- API is now connection Method 1; external Agent is Method 2. Initial setup displays DeepSeek V4.1 Flash without replacing saved configurations.
+- Research Space combines paragraph/section-aware chunking, multi-query and two-level keyword planning, keyword and local multilingual vector retrieval, and source-location attribution. Faster quick-question paths reuse caches and reduce model-call overhead.
+- Literature discovery offers open access, combined open/institutional sources, and institutional access. Institutional channels are Beta; human verification, timeouts and publisher blocking remain acquisition boundaries.
+- Interactive 2D / 3D theory and semantic graphs, year trees, filtering, data tables and scoped research conversations.
+- Product-website and GitHub links open in the system browser; maximize/restore icons follow the actual window state.
+- Bilingual guides include eight product screenshots. Usage analytics add weekly/monthly activity, first-day activation and returning usage, using the existing minimized event fields.
+
+### Installation and limitations
+
+The installer is unsigned. Windows may show unknown-publisher or SmartScreen warnings. Download from this repository and verify `SHA256SUMS.txt`. A checksum is not a code signature; keep system protections enabled.
+
+Remote AI requires your own account, API access or quota. Response time depends on the model and network. Institutional sign-in does not guarantee access to every paper. Publisher access rules still apply. Verify source texts and model outputs; LitGraph's MIT license does not relicense third-party papers or models.
