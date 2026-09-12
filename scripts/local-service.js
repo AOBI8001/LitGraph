@@ -141,7 +141,16 @@ export function localService(root, dependencies = {}) {
           if (error.code === 'ENOENT') return null;
           throw error;
         }));
-        if (bundled) return saveDocument({ ...bundled, nodeId:node.id, paperMetadata:{title:node.title,authors:node.authors,year:node.year,doi:node.doi}, key: digest(`sample-md:${bundled.corpusHash}`) });
+        if (bundled) {
+          // Distinct graph nodes may share one original. Their chunk IDs must
+          // not repeatedly overwrite each other's index under a shared key.
+          const key=digest(`sample-md:${node.id}:${bundled.corpusHash}`),existing=await readDocument(key);
+          if(existing?.corpusHash===bundled.corpusHash&&existing.markdown===bundled.markdown){
+            void embed.index?.('enqueue',{documents:[{key,node:{id:node.id,title:node.title}}]}).catch(()=>{});
+            return existing;
+          }
+          return saveDocument({ ...bundled, nodeId:node.id, paperMetadata:{title:node.title,authors:node.authors,year:node.year,doi:node.doi}, key });
+        }
       }
       return null;
     }

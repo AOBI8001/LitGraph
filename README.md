@@ -10,9 +10,9 @@ LitGraph 是一款面向文献综述、理论比较与研究探索的桌面工�
 
 在图谱中看见结构，在对话中深入问题。论文与研究资料保存在你的设备上，AI 可以来自你选择的模型 API，也可以是通过 MCP 接入的外部 Agent。
 
-**1.2.4 · Windows 10 / 11 x64 · MIT 开源**
+**1.2.5 · Windows 10 / 11 x64 · MIT 开源**
 
-> 本版包含后台增量向量索引、快速检索降级、流式回答、项目问答隔离、原句预览及原文作者年份补全。完整版本变化统一记录在[更新日志](RELEASE_NOTES.md)。
+> 本版修复样例检索准备与跨轮证据编号问题。来源展示原文开头最多 24 个词，长片段以 `...` 省略；不足十词的原文完整展示、不补写。无法核验的引用明确标注，不冒充真实来源。完整版本变化统一记录在[更新日志](RELEASE_NOTES.md)。
 
 [下载安装包](https://github.com/AOBI8001/LitGraph/releases/latest) · [产品网站](https://litgraph.aobi.qzz.io/) · [反馈与建议](https://github.com/AOBI8001/LitGraph/issues)
 

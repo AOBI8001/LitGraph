@@ -33,8 +33,8 @@ import { paperAnalysisMessages, validatePaperAnalysis } from './paper-analysis.j
 import { shouldRefreshLocalMetadata, extractSourceMetadata, applySourceMetadata, verifiedModelMetadata, metadataFrontmatter, SOURCE_METADATA_VERSION } from './local-metadata.js';
 import { messageMarkdown } from './message-markdown.js';
 import { selectEvidence } from './research-evidence.js';
-import { validateEvidenceAnswer } from './research-evidence.js';
-import { evidenceLocations } from './research-evidence.js';
+import { groundedEvidenceAnswer } from './research-evidence.js';
+import { retrievalNotice } from './research-hybrid.js';
 import { planResearchQuery, quickQueryPlan, needsModelQueryPlan, retrievalPolicy } from './research-query.js';
 import { linkMatchesSelection } from './graph-focus.js';
 import { CANVAS_BACKGROUNDS, backgroundPreset, backgroundArtwork } from './canvas-backgrounds.js';
@@ -2238,7 +2238,7 @@ function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode
     if (!parsed || typeof parsed.answer !== 'string' || !parsed.answer.trim() || !Array.isArray(parsed.suggested_followups)) throw new Error(panelText('模型已返回内容，但未按要求提供 JSON 回答和三个后续问题；请重试', 'The model replied, but did not provide the required JSON answer and three follow-up questions. Retry.'));
     const followups = [...new Set(parsed.suggested_followups.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean))];
     if (followups.length !== 3 || followups.some(item => item.length > 160)) throw new Error(panelText('模型返回的后续问题格式不正确，请重试', 'Invalid follow-up question format. Retry.'));
-    return { answer: evidenceLocations(parsed.answer,evidence,language), suggested_followups: followups, sources: validateEvidenceAnswer(parsed.answer, evidence) };
+    return { ...groundedEvidenceAnswer(parsed.answer,evidence,language), suggested_followups: followups };
   }, (state, event) => {
     if (researchRequests.get(chatKey) !== state) return;
     const windowMatches = deepReadWindow?.isConnected && deepReadWindow.dataset.chatKey === chatKey;
@@ -2297,7 +2297,7 @@ function submitResearchQuestion(element, tab, chatKey) {
     const plan = mode === 'quick' ? quickQueryPlan(question, priorMessages) : await planResearchQuery(question,{history:priorMessages,nodes:scopedNodes,signal,identity:JSON.stringify([config.provider,config.model,config.endpoint]),generate:messages=>callAI(messages,config,1000,{json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(8000)])})});
     const policy=retrievalPolicy(plan,scopedNodes.length,mode);
     const context = await prepareEvidence(scopedNodes, question, attachments, signal, policy.budget,plan,{topK:policy.topK,retrievalTimeoutMs:policy.retrievalTimeoutMs,onStage});
-    if (context.retrieval?.warning || plan.degraded) toast(panelText('部分检索增强不可用，本次使用可用检索路径。','Some retrieval enhancements are unavailable; using available search paths.'));
+    const notice=retrievalNotice(context.retrieval,plan,language);if(notice)toast(notice);
     const textMessages = researchMessages(scopedNodes, priorMessages, question, context, mode);
     return { messages: withImages(textMessages, attachments.filter(a => a.image).map(a => a.image), config.protocol || 'openai-chat'), evidence: context.evidence };
   };

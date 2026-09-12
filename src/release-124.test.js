@@ -5,12 +5,12 @@ import {evidenceOpening,evidenceLocations} from './research-evidence.js';
 import {extractSourceMetadata,applySourceMetadata,verifiedModelMetadata} from './local-metadata.js';
 import {panTimelineCamera} from './timeline-navigation.js';
 import {mountModelRotation} from './model-rotation.js';
-test('evidence shows ten original English words, short sentence and Chinese segmentation',()=>{
- assert.equal(evidenceOpening('The emotional stop-signal paradigm here was coupled with the manipulation of being watched.'),'The emotional stop-signal paradigm here was coupled with the manipulation...');
- assert.equal(evidenceOpening('A short sentence. A second sentence.'),'A short sentence.');
+test('evidence shows original words without fabricating short excerpts and uses Chinese segmentation',()=>{
+ assert.equal(evidenceOpening('The emotional stop-signal paradigm here was coupled with the manipulation of being watched.',10),'The emotional stop-signal paradigm here was coupled with the manipulation...');
+ assert.equal(evidenceOpening('A short sentence. A second sentence.'),'A short sentence. A second sentence.');
  const chinese='本研究通过网络摄像头的开关设置观察条件，并比较参与者在不同实验条件下的任务表现。';
- const opening=evidenceOpening(chinese);assert.ok(opening.endsWith('...'));assert.ok(chinese.startsWith(opening.slice(0,-3)));
- assert.match(evidenceLocations('See [E1]',[{id:'E1',title:'Fixture',text:'One two three four five six seven eight nine ten eleven.',page:2,lineStart:4,lineEnd:8}]),/原句：“One two three four five six seven eight nine ten\.\.\.”/);
+ const opening=evidenceOpening(chinese,10);assert.ok(opening.endsWith('...'));assert.ok(chinese.startsWith(opening.slice(0,-3)));
+ assert.match(evidenceLocations('See [E1]',[{id:'E1',title:'Fixture',text:'One two three four five six seven eight nine ten eleven.',page:2,lineStart:4,lineEnd:8}]),/原句：“One two three four five six seven eight nine ten eleven\.”/);
  assert.ok(!evidenceLocations('[E1]',[{id:'E1',text:'<script>alert(1)</script>'}]).includes('<script>'));
 });
 test('Chinese thesis byline/date override legacy placeholders, not supervisor',()=>{

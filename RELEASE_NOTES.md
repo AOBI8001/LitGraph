@@ -1,3 +1,29 @@
+# LitGraph 1.2.5
+
+2026-09-12 · Windows 10 / 11 x64 · `LitGraph-Setup-1.2.5-x64.exe`
+
+## 中文
+
+- **原文证据摘录**：来源条目展示原文开头最多 24 个词，长片段使用 `...` 省略；不会因第一句过短而只展示几个词。原文本身不足十词时完整展示，不编造补足；中文按词分段。
+- **跨轮证据编号**：历史回答不再携带上一轮来源编号与来源附录，明确限定模型只能引用本次检索的编号。支持组合编号、区间与全角括号。不存在的编号标注“引用未核验”，保留可用回答和真实来源，不再让整条问答报 Unknown evidence ID，也不会将错误编号强行匹配到其他论文。
+- **样例检索修复**：按当前分段规则重建样例向量缓存，覆盖 50 个节点、3,225 个片段；启动后自动准备样例索引。共享原文的不同节点使用独立索引标识，避免覆盖。重复读取不再无条件重写原文并重新排队。
+- **降级说明**：区分后台准备、检索超时与真正不可用。冷索引没有可用向量时直接返回关键词路径，不额外加载查询模型；专家改写失败仍保留本地中英关键词扩展。
+- 增加打包时样例缓存覆盖检查，以及两轮桌面问答、异常引用和实际本地向量检索回归测试。保留 1.2.4 的左键旋转、右键平移操作。
+
+有效证据编号表示对应原文存在，不等于模型结论已获人工核验。标注未核验的引用及其相关结论仍需检查。首次索引与模型加载需要时间，不承诺固定回答时长。升级保留本机数据与配置，建议先备份。安装包未代码签名，请核对 `SHA256SUMS.txt` 并保留系统安全防护。
+
+## English
+
+- Show up to 24 original opening words in source entries, with `...` for longer excerpts. Continue beyond a short first sentence; show originals shorter than ten words fully without inventing text.
+- Remove prior-turn source IDs and appended source lists from model history. Explicitly scope allowed IDs to the current request; support grouped, ranged and full-width citations. Unknown IDs are visibly marked unverified rather than failing the whole answer or being remapped to unrelated sources.
+- Rebuild sample vectors for the current 3,225 chunks across 50 nodes and prepare indexes automatically on launch. Give nodes sharing an original distinct index identities; avoid rewriting unchanged sample documents on every question.
+- Distinguish warming, time-budget fallback and actual unavailability. Skip query-model loading for empty indexes; retain local bilingual expansion when expert query rewriting fails.
+- Add packaging coverage checks and two-turn desktop tests with real local vector retrieval and deliberately invalid model references. Retain left-drag rotation and right-drag panning.
+
+Resolvable citations do not guarantee factual correctness. Unverified citations and associated claims require source checking. Initial indexing/model loading still takes time. Upgrade retains local data/settings; back up first. The installer is unsigned; verify `SHA256SUMS.txt` and keep system protections enabled.
+
+---
+
 # LitGraph 1.2.4
 
 2026-09-12 · Windows 10 / 11 x64 · `LitGraph-Setup-1.2.4-x64.exe`

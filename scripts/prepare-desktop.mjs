@@ -1,6 +1,8 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import pngToIco from 'png-to-ico';
+import {checkSampleVectors} from './check-sample-vectors.mjs';
+console.log('Sample vector coverage:',await checkSampleVectors('dist/sample-fulltext'));
 await mkdir('output/build-resources', { recursive: true });
 await writeFile('output/build-resources/litgraph.ico', await pngToIco('src/assets/brand/litgraph-mark.png'));
 // Retain verbatim license/notice files for frontend dependencies bundled by Vite.

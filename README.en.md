@@ -10,9 +10,9 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.2.4 · Windows 10 / 11 x64 · MIT licensed**
+**1.2.5 · Windows 10 / 11 x64 · MIT licensed**
 
-> Includes background incremental vectors, bounded Quick retrieval, streamed answers, project-scoped conversations, original-sentence previews and source metadata recovery. Version history lives in the [changelog](RELEASE_NOTES.md).
+> Fixes sample index preparation and cross-turn evidence IDs. Sources display up to 24 original opening words, with `...` for longer excerpts; originals shorter than ten words are shown fully, never padded. Unknown citations are explicitly marked unverified, never mapped to unrelated sources. Version history lives in the [changelog](RELEASE_NOTES.md).
 
 [Download](https://github.com/AOBI8001/LitGraph/releases/latest) · [Website](https://litgraph.aobi.qzz.io/) · [Feedback](https://github.com/AOBI8001/LitGraph/issues)
 

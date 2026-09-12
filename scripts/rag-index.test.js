@@ -15,3 +15,7 @@ test('index builds before queries, resumes checkpoints, invalidates changed MD a
 test('background failures are visible and retryable',async()=>{
  let fail=true;const index=createRagIndex({embed:async()=>{if(fail)throw Error('test');return [Array(384).fill(0)];},readRecord:async()=>({markdown:'test text'}),readIndex:async()=>null,writeIndex:async()=>{},yieldWork:()=>Promise.resolve()});index.enqueue('a',{id:'a'});await waitFor(()=>index.status().failed===1);fail=false;index.control('retry');await waitFor(()=>index.status().ready===1);index.close();
 });
+test('cold and mismatched indexes return without loading query model',async()=>{
+ let calls=0;const index=createRagIndex({embed:async()=>{calls++;throw Error('must not load');},readRecord:async()=>null,readIndex:async()=>null,writeIndex:async()=>{}});
+ const result=await index.search([{key:'missing',id:'p',hash:'new'}],['question']);assert.equal(result.indexedChunks,0);assert.equal(calls,0);index.close();
+});

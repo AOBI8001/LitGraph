@@ -53,13 +53,33 @@ export function packEvidence(ranked,budget,topK,targets=[]){
  if(targets.length>1)for(let i=0;i<Math.floor(topK/targets.length);i++)for(const target of targets)add(ranked.filter(c=>c.documentId===target)[i]);
  for(const c of ranked)add(c);return selected.map((c,i)=>({...c,id:`E${i+1}`,truncated:false}));
 }
-export function validateEvidenceAnswer(answer,evidence){const ids=[...new Set([...answer.matchAll(/\[(E\d+)\]/g)].map(m=>m[1]))],known=new Map(evidence.map(e=>[e.id,e]));if(ids.some(id=>!known.has(id)))throw new Error('模型引用了不存在的证据编号，请重试。 / Unknown evidence ID.');return ids.map(id=>known.get(id));}
+const citationPattern=()=>/[\[【]\s*E\d+(?:\s*(?:[,，;；、]|[-–—])\s*E?\d+)*\s*[\]】]/gi;
+function citationIds(token){
+ const body=token.slice(1,-1).trim(),range=body.match(/^E(\d+)\s*[-–—]\s*E?(\d+)$/i);
+ if(range){const a=Number(range[1]),b=Number(range[2]);if(b<a||b-a>50)return [body];return Array.from({length:b-a+1},(_,i)=>'E'+(a+i));}
+ return body.split(/\s*[,，;；、]\s*/).map(s=>'E'+s.replace(/^E/i,'').trim());
+}
+export function normalizeEvidenceCitations(answer){return String(answer).replace(citationPattern(),token=>citationIds(token).map(id=>`[${id}]`).join(''));}
+export function validateEvidenceAnswer(answer,evidence){const ids=[...new Set([...String(answer).matchAll(citationPattern())].flatMap(m=>citationIds(m[0])))],known=new Map(evidence.map(e=>[e.id,e]));if(ids.some(id=>!known.has(id)))throw new Error('模型引用了不存在的证据编号，请重试。 / Unknown evidence ID.');return ids.map(id=>known.get(id));}
+// Old turn IDs are not a source registry for the current retrieval.
+export function historyWithoutEvidence(text){return String(text||'').split(/\n(?:#{1,6}\s*)?(?:证据来源|Sources)\s*[:：]/i)[0].replace(citationPattern(),'').trim();}
+// Keep the usable answer, but never silently remap or endorse unknown citations.
+export function groundedEvidenceAnswer(answer,evidence,language='zh'){
+ const known=new Set(evidence.map(e=>e.id)),invalid=new Set();
+ const cleaned=String(answer).replace(citationPattern(),token=>citationIds(token).map(id=>{
+  if(known.has(id))return `[${id}]`;invalid.add(id);return language==='en'?`(unverified citation: ${id})`:`（引用未核验：${id}）`;
+ }).join(''));
+ const notice=invalid.size?(language==='en'?'Some citations were not supplied in this retrieval and are marked unverified. Check the associated claims against the original; these markers are not verified sources.':'部分引用不在本次检索证据中，已标记“引用未核验”；对应结论需核对原文，不能视为已有证据支持。'):'';
+ const result=notice?`${cleaned}\n\n> ${notice}`:cleaned;
+ return {answer:evidenceLocations(result,evidence,language),sources:validateEvidenceAnswer(cleaned,evidence),invalidEvidenceIds:[...invalid]};
+}
 // Quotes are sliced from the retrieved original, never composed by the model.
 // Chinese uses word segmentation; English keeps punctuation and original casing.
-export function evidenceOpening(text, limit=10) {
- const source=String(text||'').replace(/^#{1,6}[^\n]*\n/gm,'').trim();
+export function evidenceOpening(text, limit=24) {
+ const source=String(text||'').replace(/^(?:#{1,6}[^\n]*\n\s*)+/,'').trim();
  if(!source)return '';
- const sentence=[...new Intl.Segmenter(undefined,{granularity:'sentence'}).segment(source)][0]?.segment.trim()||source;
+ const sentence=source;
+ limit=Math.max(10,Math.floor(Number(limit)||24));
  const words=/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Thai}]/u.test(sentence)
   ? [...new Intl.Segmenter(undefined,{granularity:'word'}).segment(sentence)].filter(s=>s.isWordLike)
   : [...sentence.matchAll(/\S+/g)].filter(s=>/[\p{L}\p{N}]/u.test(s[0]));

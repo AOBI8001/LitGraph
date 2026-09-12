@@ -13,7 +13,8 @@ export function createVectorService(root,dataRoot){
   const models=[path.join(diskRoot,'dist','models'),path.join(root,'public','models')].find(p=>existsSync(path.join(p,'manifest.json')));
   if(!models)throw Error('Local embedding model is missing. / 缺少本地向量模型文件。');
   const sampleVectors=[path.join(root,'dist','sample-fulltext','vectors.e5.q8.json.gz'),path.join(root,'public','sample-fulltext','vectors.e5.q8.json.gz')].find(existsSync)||'';
-  const active=new Worker(new URL('./rag-vector-worker.mjs',import.meta.url),{workerData:{models,sampleVectors,dataRoot,cache:path.join(dataRoot,'data','vectors','rag')}});worker=active;active.unref();
+  const sampleDirectory=[path.join(root,'dist','sample-fulltext'),path.join(root,'public','sample-fulltext')].find(p=>existsSync(path.join(p,'index.json')));
+  const active=new Worker(new URL('./rag-vector-worker.mjs',import.meta.url),{workerData:{models,sampleVectors,sampleDirectory,dataRoot,cache:path.join(dataRoot,'data','vectors','rag')}});worker=active;active.unref();
   const fail=error=>{if(worker===active)worker=null;for(const [id,task]of pending){task.cleanup();task.reject(error);pending.delete(id);}};
   active.on('message',message=>{const task=pending.get(message.id);if(!task)return;pending.delete(message.id);task.cleanup();message.error?task.reject(Error(message.error)):task.resolve(message.vectors);if(!pending.size)active.unref();});
   active.on('error',fail);active.on('exit',code=>{if(worker===active){worker=null;if(pending.size)fail(Error('Local vector worker exited: '+code));}});

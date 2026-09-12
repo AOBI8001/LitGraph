@@ -39,12 +39,15 @@ export function createRagIndex({embed,readRecord,readIndex,writeIndex,yieldWork=
   status(keys){const list=(keys||[...jobs.keys()]).map(key=>jobs.get(key)).filter(Boolean);return {paused,documents:list.length,ready:list.filter(j=>j.state==='ready').length,failed:list.filter(j=>j.state==='failed').length,queued:list.filter(j=>j.state==='queued').length,indexing:list.filter(j=>j.state==='indexing').length,chunks:list.reduce((n,j)=>n+j.total,0),completedChunks:list.reduce((n,j)=>n+j.completed,0),states:list.map(j=>({key:j.key,state:j.state,completed:j.completed,total:j.total,error:j.error}))};},
   control(action){if(action==='pause')paused=true;else{paused=false;if(action==='retry')for(const job of jobs.values())if(job.state==='failed'||job.state==='no_source')job.state='queued';void drain();}return {paused};},
   async search(documents,queries,signal){foreground++;try{
-   signal?.throwIfAborted();const qvectors=await embed(queries,'query',signal),ranks=queries.map(()=>[]);let indexedChunks=0,missingDocuments=0;
+   signal?.throwIfAborted();const ranks=queries.map(()=>[]),available=[];let indexedChunks=0,missingDocuments=0;
    for(const doc of documents){signal?.throwIfAborted();const index=ready.get(doc.key)||await readIndex(doc.key).catch(()=>null);
     if(!index||index.version!==version||index.hash!==doc.hash||index.nodeId!==doc.id){missingDocuments++;continue;}
-    remember(doc.key,index);indexedChunks+=index.entries.length;
-    for(const entry of index.entries)for(let q=0;q<qvectors.length;q++){const score=entry.vector.reduce((s,x,i)=>s+x*qvectors[q][i],0);ranks[q].push({chunkId:entry.chunkId,score});}
+    remember(doc.key,index);indexedChunks+=index.entries.length;available.push(index);
    }
+   // A cold/empty scope needs no model load or query embedding at all.
+   if(!indexedChunks)return {ranks,indexedChunks,missingDocuments};
+   const qvectors=await embed(queries,'query',signal);
+   for(const index of available)for(const entry of index.entries)for(let q=0;q<qvectors.length;q++){const score=entry.vector.reduce((s,x,i)=>s+x*qvectors[q][i],0);ranks[q].push({chunkId:entry.chunkId,score});}
    return {ranks:ranks.map(r=>r.sort((a,b)=>b.score-a.score).slice(0,80)),indexedChunks,missingDocuments};
   }finally{foreground--; }},
   close(){closed=true;},
