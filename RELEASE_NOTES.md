@@ -9,7 +9,7 @@
 - **研究问答性能**：合并同页同章节的过短片段；MD 保存后自动增量建立本地向量索引，启动时补建旧项目并恢复进度。快速模式不再为整库现场编码，不单独调用模型改写；向量检索超时或未就绪时退回关键词检索。支持 API 流式回答及可输出增量内容的外部 Agent。
 - **研究上下文与证据**：按项目隔离对话、标签页和草稿；切换项目时取消旧请求。来源条目保留文献、页码和行号，并展示原句开头十个词，余文以 `...` 省略；中文按词分段。引用可定位不等于结论必然正确，仍需核对原文。
 - **原文元数据补全**：直接读取可解析原文中的署名与出版/学位日期；已有本地项目打开时自动检查旧记录，分析阶段增加有原文引句核验的模型提取。无法确认时保持未知，不再把当前年份当出版年；被引量只取可核验的学术记录，不从正文猜测。
-- **画布交互与计数**：统一全部 3D 视图的右键/空白拖动平移，画面跟随鼠标；Shift＋左拖保留旋转。项目菜单按未隐藏的画布节点计数，而非全部导入记录。
+- **画布交互与计数**：全部 3D 视图保留左键拖动空白处旋转，无需组合键；右键拖动平移，画面跟随鼠标。项目菜单按未隐藏的画布节点计数，而非全部导入记录。
 - **界面与数据管理**：移除研究空间的全文索引操作区，维护在后台进行；API 标记推荐，API 与外部 Agent 统一“测试并保存”样式及位置。设置顺序为数据文件夹、还原设置、清除数据；清除用户数据需确认，内置样例始终保留。
 - 其他改进：优化长文本布局、错误提示和请求取消；补充中英文说明、元数据/手势测试、桌面隔离与大批次回归。
 
@@ -22,7 +22,7 @@ Major changes since the previous public release **1.2.1**, including locally tes
 - Merge short fragments; automatically checkpoint background passage vectors on MD save and backfill/resume on launch. Quick mode avoids a separate model rewrite and query-time corpus encoding, with bounded dense retrieval and lexical fallback. Stream API answers and compatible external-Agent output.
 - Isolate conversations, tabs and drafts by project; cancel stale requests on switching. Evidence sources include the first ten original words plus `...` when truncated, alongside page/line locations. Chinese uses word segmentation. Locatable citations still require substantive verification.
 - Recover bylines and publication/thesis dates from readable originals, check existing local records on opening, and verify model-extracted bibliographic fields against supplied source quotes during analysis. Unknown dates stay unknown; citation counts require verified scholarly records.
-- Pan all 3D views with right-drag or background left-drag; use Shift + left-drag to rotate. Project counts exclude hidden import nodes.
+- Pan all 3D views with right-drag; retain background left-drag rotation without modifier keys. Project counts exclude hidden import nodes.
 - Remove indexing controls from Research space; mark API Recommended and align both Test & save actions. Settings order: data folder, reset settings, clear data. Confirmed user-data clearing always retains the bundled sample.
 - Smaller layout, error-feedback, cancellation and regression-test improvements.
 

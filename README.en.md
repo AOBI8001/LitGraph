@@ -212,7 +212,7 @@ Hover to inspect a paper label. Click to open its details and emphasize its conn
 
 Multi-select and box selection create a set of papers to investigate. The research entry reflects that selection and carries it into Research space. Leaving either selection mode, or changing views and spatial layouts, clears the current selection.
 
-In every 3D view, right-drag or left-drag on the background pans the scene in the pointer's direction. Shift + left-drag rotates the model (bounded observation angles in the timeline). Use the wheel to zoom and arrow keys or `WASD` to move the camera; a canvas legend explains the controls. The toolbar also offers node renaming, position locking, fit-to-canvas, and fullscreen browsing.
+In every 3D view, left-drag on the background rotates the model without modifier keys (bounded observation angles in the timeline). Right-drag pans the scene in the pointer's direction. Use the wheel to zoom and arrow keys or `WASD` to move the camera; a canvas legend explains the controls. The toolbar also offers node renaming, position locking, fit-to-canvas, and fullscreen browsing.
 
 ### Filters and reading progress
 

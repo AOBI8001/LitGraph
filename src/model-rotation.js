@@ -85,7 +85,7 @@ export function mountModelRotation(graph, THREE, host, options) {
     const target = camera.getWorldDirection(new THREE.Vector3())
       .multiplyScalar(position.distanceTo(controls.target)).add(position);
     graph.cameraPosition(position, target, 0);
-    const mode = event.button === 0 && event.shiftKey ? (timeline() ? 'orbit' : 'model') : 'pan';
+    const mode = event.button === 2 ? 'pan' : (timeline() ? 'orbit' : 'model');
     if (timeline() && !s.orbitLimits) s.orbitLimits = new THREE.Spherical().setFromVector3(position.clone().sub(target));
     gesture = { mode, x:event.clientX, y:event.clientY, id:event.pointerId, controlsEnabled:graph.enableNavigationControls(), cameraPosition:position, cameraRotation, cameraTarget:target };
     graph.enableNavigationControls(false);

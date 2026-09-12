@@ -1339,7 +1339,7 @@ function render() {
 function updateGraphLegend() {
   const keyHint = document.querySelector('#graph-3d-keys');
   keyHint.hidden = renderMode !== '3d' || view === 'table';
-  keyHint.innerHTML = `<span>${panelText('拖动空白 / 右键：平移','Drag background / right button: pan')}</span><span>${panelText('Shift＋拖动：旋转','Shift + drag: rotate')}</span><span><kbd>W</kbd><kbd>↑</kbd> ${panelText('前进', 'Forward')}</span><span><kbd>S</kbd><kbd>↓</kbd> ${panelText('后退', 'Back')}</span><span><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> ${panelText('左右平移', 'Strafe')}</span>`;
+  keyHint.innerHTML = `<span>${panelText('左键拖动空白：旋转','Left-drag background: rotate')}</span><span>${panelText('右键拖动：平移','Right-drag: pan')}</span><span><kbd>W</kbd><kbd>↑</kbd> ${panelText('前进', 'Forward')}</span><span><kbd>S</kbd><kbd>↓</kbd> ${panelText('后退', 'Back')}</span><span><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> ${panelText('左右平移', 'Strafe')}</span>`;
   const palette = EDGE_PALETTES[settings().edgePalette] || EDGE_PALETTES.e0;
   const legend = document.querySelector('.graph-legend');
   if (!legend) return;

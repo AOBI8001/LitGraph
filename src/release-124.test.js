@@ -37,7 +37,7 @@ test('pan moves the picked world position by the same screen pixel delta',()=>{
  camera.position.copy(delta.position);camera.updateMatrixWorld();const after=point.clone().project(camera);
  assert.ok(Math.abs((after.x-before.x)*1200/2+80)<.001);assert.ok(Math.abs(-(after.y-before.y)*800/2-60)<.001);
 });
-test('mounted 3D controller pans both buttons in all four view/basis slots; Shift retains rotation',()=>{
+test('mounted 3D controller right-drags to pan and left-drags to rotate without modifiers in all four view/basis slots',()=>{
  for(const mode of ['model','timeline'])for(const basis of ['argument','semantic']){
   const listeners=new Map(),host={ownerDocument:{addEventListener(){},removeEventListener(){}},style:{},focus(){},setPointerCapture(){},hasPointerCapture(){return false;},getBoundingClientRect(){return {left:0,top:0,width:1200,height:800};},addEventListener(type,fn){listeners.set(type,fn);},removeEventListener(){}};
   const camera=new THREE.PerspectiveCamera(50,1.5,1,10000);camera.position.set(0,0,400);camera.lookAt(0,0,0);camera.updateMatrixWorld();
@@ -45,8 +45,8 @@ test('mounted 3D controller pans both buttons in all four view/basis slots; Shif
   const graph={scene:()=>scene,camera:()=>camera,controls:()=>controls,graphData:()=>({nodes:[{x:0,y:0,z:0}]}),cameraPosition(position,target){camera.position.copy(position);controls.target.copy(target);},enableNavigationControls(value){if(value===undefined)return enabled;enabled=value;}};
   const rotation=mountModelRotation(graph,THREE,host,{mode:()=>mode,slot:()=>mode+':'+basis,enabled:()=>true,guides:()=>null});
   const event=(button,x,y,shiftKey=false)=>({button,clientX:x,clientY:y,pointerId:1,pointerType:'mouse',shiftKey,preventDefault(){},stopImmediatePropagation(){}});
-  for(const button of [0,2]){const before=camera.position.clone(),heading=camera.quaternion.clone();listeners.get('pointerdown')(event(button,300,100));listeners.get('pointermove')(event(button,220,160));listeners.get('pointerup')(event(button,220,160));assert.ok(camera.position.distanceTo(before)>1);assert.ok(camera.quaternion.angleTo(heading)<1e-7);assert.equal(enabled,true);}
-  const heading=camera.quaternion.clone();listeners.get('pointerdown')(event(0,300,100,true));listeners.get('pointermove')(event(0,360,140,true));listeners.get('pointerup')(event(0,360,140,true));
+  for(const button of [2]){const before=camera.position.clone(),heading=camera.quaternion.clone();listeners.get('pointerdown')(event(button,300,100));listeners.get('pointermove')(event(button,220,160));listeners.get('pointerup')(event(button,220,160));assert.ok(camera.position.distanceTo(before)>1);assert.ok(camera.quaternion.angleTo(heading)<1e-7);assert.equal(enabled,true);}
+  const heading=camera.quaternion.clone();listeners.get('pointerdown')(event(0,300,100));listeners.get('pointermove')(event(0,360,140));listeners.get('pointerup')(event(0,360,140));
   assert.ok(mode==='model'?rotation.rotation.angleTo(new THREE.Quaternion())>.01:camera.quaternion.angleTo(heading)>.01);rotation.dispose();
  }
 });

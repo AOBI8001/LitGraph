@@ -25,7 +25,7 @@ async page => {
       const before=await state(),b=await page.locator('#graph-3d').boundingBox();
       await page.screenshot({path:`output/playwright/rotation-${view}-${basis}-before.png`});
       const frames=[];
-      await page.keyboard.down('Shift');await page.mouse.move(b.x+35,b.y+45);await page.mouse.down();
+      await page.mouse.move(b.x+35,b.y+45);await page.mouse.down();
       for(const [dx,dy] of [[160,0],[230,80],[80,170],[20,40]]){
         await page.mouse.move(b.x+35+dx,b.y+45+dy,{steps:12});frames.push(await state());
       }
@@ -53,5 +53,5 @@ async page => {
       if(report.cameraMovement>1e-6||report.cameraTurn>1e-6||report.targetMovement>1e-6||report.centerDrift>1e-6||report.modelTurn<.01)throw new Error('Model rotation regression: '+JSON.stringify(report));
     }
     return reports;
-  }finally{await page.keyboard.up('Shift');await page.unroute(pattern,inject);await page.evaluate(saved=>{localStorage.clear();Object.entries(saved).forEach(([k,v])=>localStorage.setItem(k,v))},backup);await page.reload();}
+  }finally{await page.unroute(pattern,inject);await page.evaluate(saved=>{localStorage.clear();Object.entries(saved).forEach(([k,v])=>localStorage.setItem(k,v))},backup);await page.reload();}
 }
