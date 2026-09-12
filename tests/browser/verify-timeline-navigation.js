@@ -22,8 +22,8 @@ async page => {
       assert(distance(before.root,pan.root)<1e-6,'Pan moves model');
       if(before.guide)assert(distance(before.guide,pan.guide)<1e-6,'Pan moves year planes');
       await page.screenshot({path:`output/playwright/timeline-${basis}-pan.png`});
-      await drag('right',160,90);const orbit=await state();
-      assert(distance(pan.cameraQ,orbit.cameraQ)>.01,'Right drag does not inspect depth');
+      await page.keyboard.down('Shift');await drag('left',160,90);await page.keyboard.up('Shift');const orbit=await state();
+      assert(distance(pan.cameraQ,orbit.cameraQ)>.01,'Shift drag does not inspect depth');
       assert(distance(pan.root,orbit.root)<1e-6,'Right drag rotates model');
       assert(Math.abs(orbit.roll)<1e-6,'Year axis rolled');
       assert(Math.abs(pan.distance-orbit.distance)<1e-6,'Orbit changes zoom');

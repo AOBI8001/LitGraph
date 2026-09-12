@@ -68,7 +68,7 @@ A successful litgraph_connect handshake automatically triggers the product dialo
 Keep waiting when idle until I ask you to stop, then disconnect. I will send questions from LitGraph. Keep this task running; do not end after saying "connected". If your tool cannot keep waiting, tell me instead of pretending the website's AI features are available.`;
   return `请作为我的 LitGraph 外部 Agent 处理应用中的 AI 请求。\n当前安装文件夹：${data.installRoot}\n当前用户数据文件夹：${data.root}\n当前论文项目：${context.title}\n先阅读：${data.guide}\n文献发现规范：${data.contracts.discovery}\n研究空间规范：${data.contracts.research}\n共用检索下载规范：${data.contracts.downloads}\n不要修改软件源码或读取任何模型 API 密钥。\n请在你所在工具的持久化设置中一次性注册名为 litgraph 的本地 STDIO MCP 服务。安装版通过连接文件自动发现当前运行的 LitGraph，软件重启后不需要重新复制配置，不要把端口写死或把连接文件中的凭据另行复制出来。配置如下（请勿公开）：\n${JSON.stringify(config, null, 2)}\n若 MCP 配置不能在当前会话重新加载，可按指南通过本机 HTTP 接口执行同样的任务循环；不要仅写好配置就声称接入成功。\n调用 litgraph_connect 成功后，LitGraph 会自动弹窗显示“外部 Agent 接入成功”。请完成此握手来触发产品内确认，不要仅在聊天中声称成功，也不要修改页面或源码来伪造弹窗。使用 litgraph_connect 报告真实模型名称及实际图片读取能力，不知道模型名称则明确写“模型未知”。然后持续调用 litgraph_next_task(wait_ms=25000)，按任务提供的 messages 规范处理，并以 litgraph_submit_result 回传 result 字符串。文献发现仅生成检索策略，遵守对应 JSON 规范，不进行候选论文的二次评估；LitGraph 负责数据库检索和合法下载，不要凭记忆生成文献，也不要因自身没有联网工具而拒绝检索策略任务；研究回答依据提供的原文，事实后标注本次证据编号如 [E2]，软件显示真实 PDF 文件页或 MD 行号；比较论文分别标注，自己的推断标记【AI 推断】，研究回答在 JSON 的 answer 字段内使用 Markdown，并另外提供三个纯文本 suggested_followups；论文总结按纯文本段落返回，保留分类和关系 JSON。两种接入方式遵守同一格式规范，按本次快速或专家偏好回答。无任务时继续等待，直到我要求停止；停止前 disconnect。\n我将在 LitGraph 应用中发送问题。你必须保持当前任务运行，不能发送“已连接”后结束。若你的工具无法持续等待，请直接告诉我，不能假装应用功能已可用。`;
 }
-export async function externalCompletion(messages, maxTokens, signal, researchMode = 'quick') {
+export async function externalCompletion(messages, maxTokens, signal, researchMode = 'quick',onText) {
   signal?.throwIfAborted();
   const id = crypto.randomUUID();
   const cancel = () => { void localRequest(`tasks/${id}`, undefined, { method: 'DELETE' }).catch(() => {}); };
@@ -80,6 +80,7 @@ export async function externalCompletion(messages, maxTokens, signal, researchMo
     while (Date.now() < deadline) {
       signal?.throwIfAborted();
       const job = await localRequest(`tasks/${id}`, undefined, { signal });
+      if(job.partial)onText?.(job.partial);
       if (job.state === 'done') return job.result;
       if (job.state === 'failed') throw new Error(job.error || 'Agent task failed.');
       if (job.state === 'cancelled') throw new DOMException('Agent task cancelled.', 'AbortError');

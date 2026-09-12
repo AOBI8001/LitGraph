@@ -1,6 +1,9 @@
 // Capture only the application's initial chrome. Never translate paper text,
 // project names, API responses, or user-authored conversations.
 const english = {
+  '先登录官方 Codex 或 Claude Code，再测试并保存。连接后，检索、论文分析和研究问答会按需调用。': 'Sign in to official Codex or Claude Code, then test and save. Searches, paper analysis and research questions run on demand.',
+  '支持 OpenAI、Claude、Deepseek、Qwen等。密钥仅保存在当前设备。': 'Supports OpenAI, Claude, Deepseek, Qwen and more. Keys stay on this device.',
+  '推荐': 'Recommended',
   '登录官方 Codex或 Claude Code。点击连结并验证。连接成功后，检索、论文分析和研究问答会按需调用。': 'Sign in to official Codex or Claude Code, then select Connect & verify. Once connected, searches, paper analysis and research questions run on demand.',
   '连接外部 Agent 或模型 API，开始检索与研究。': 'Connect an external agent or model API to start searching and researching.',
   '支持 OpenAI、Claude、智谱、Kimi、Qwen、DeepSeek 与豆包。密钥仅保存在当前设备。': 'Supports OpenAI, Claude, Zhipu, Kimi, Qwen, DeepSeek and Doubao. Keys stay on this device.',

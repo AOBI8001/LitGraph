@@ -1,5 +1,5 @@
 // Paragraph-first source chunks. Offsets refer to LF-normalized, otherwise unmodified MD.
-export const CHUNK_VERSION='paragraph-v2';
+export const CHUNK_VERSION='paragraph-v3';
 export const fingerprint=text=>{let a=2166136261,b=5381;for(let i=0;i<text.length;i++){a=Math.imul(a^text.charCodeAt(i),16777619);b=Math.imul(b,33)^text.charCodeAt(i);}return (a>>>0).toString(16)+(b>>>0).toString(16);};
 export const terms=text=>String(text).normalize('NFKC').toLowerCase().match(/[a-z0-9]+(?:[-'][a-z]+)*|[\u3400-\u9fff]{1,2}/g)||[];
 function headingSection(text){
@@ -22,7 +22,18 @@ export function chunkDocument(document,node={},maxChars=1400){
   }
  };
  const flush=end=>{if(start!==null)push(start,end);start=null;};
- lines.forEach((line,i)=>{const marker=line.match(/^## PDF Page (\d+)\s*$/);if(marker){flush(offsets[i]);page=Number(marker[1]);return;}const detected=headingSection(line),isHeading=detected||/^#{1,6}\s+/.test(line);if(isHeading){flush(offsets[i]);if(detected)section=detected;heading=line.replace(/^#+\s*/,'').trim();}if(!line.trim()){flush(offsets[i]);return;}if(start===null)start=offsets[i];});flush(source.length);return chunks;
+ lines.forEach((line,i)=>{const marker=line.match(/^## PDF Page (\d+)\s*$/);if(marker){flush(offsets[i]);page=Number(marker[1]);return;}const detected=headingSection(line),isHeading=detected||/^#{1,6}\s+/.test(line);if(isHeading){flush(offsets[i]);if(detected)section=detected;heading=line.replace(/^#+\s*/,'').trim();}if(!line.trim()){flush(offsets[i]);return;}if(start===null)start=offsets[i];});flush(source.length);
+ // PDF extraction often inserts blank lines between individual lines. Merge
+ // adjacent short paragraphs, never crossing a page or section/heading boundary.
+ // Slice the original source so evidence offsets and quotations remain exact.
+ const merged=[];
+ for(const chunk of chunks){const previous=merged.at(-1);
+  if(previous&&previous.page===chunk.page&&previous.section===chunk.section&&previous.heading===chunk.heading&&(previous.text.length<600||chunk.text.length<120)&&chunk.endOffset-previous.startOffset<=maxChars){
+   previous.endOffset=chunk.endOffset;previous.lineEnd=chunk.lineEnd;previous.text=source.slice(previous.startOffset,chunk.endOffset);
+   previous.chunkId=`${node.id||'attachment'}:${CHUNK_VERSION}:${version}:${previous.startOffset}-${chunk.endOffset}`;
+  }else merged.push({...chunk});
+ }
+ return merged;
 }
 export function makeCandidates(documents){return documents.flatMap(({node,document})=>document?.markdown?.trim()?chunkDocument(document,node):node.abstract?.trim()?[{chunkId:`${node.id}:abstract:${fingerprint(node.abstract)}`,documentId:node.id,title:node.title,authors:node.authors||[],year:node.year,section:'abstract',text:node.abstract,sourceKind:'abstract',startOffset:0,endOffset:node.abstract.length}]:[]);}
 export function explicitTargets(documents,question){const norm=s=>String(s||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');const q=norm(question);return documents.filter(({node})=>(norm(node.title).length>12&&q.includes(norm(node.title)))||(node.doi&&q.includes(norm(node.doi)))).map(x=>x.node.id);}
@@ -43,4 +54,16 @@ export function packEvidence(ranked,budget,topK,targets=[]){
  for(const c of ranked)add(c);return selected.map((c,i)=>({...c,id:`E${i+1}`,truncated:false}));
 }
 export function validateEvidenceAnswer(answer,evidence){const ids=[...new Set([...answer.matchAll(/\[(E\d+)\]/g)].map(m=>m[1]))],known=new Map(evidence.map(e=>[e.id,e]));if(ids.some(id=>!known.has(id)))throw new Error('模型引用了不存在的证据编号，请重试。 / Unknown evidence ID.');return ids.map(id=>known.get(id));}
-export function evidenceLocations(answer,evidence,language='zh'){const sources=validateEvidenceAnswer(answer,evidence);if(!sources.length)return answer;return answer+'\n\n'+(language==='en'?'Sources:':'证据来源：')+'\n\n'+sources.map(e=>`- [${e.id}] ${e.title||e.fileName} · ${e.section||'unknown'} · ${e.page?(language==='en'?`PDF page ${e.page}`:`PDF 第 ${e.page} 页`):(language==='en'?'Markdown':'MD')} · ${language==='en'?'lines':'行'} ${e.lineStart||1}–${e.lineEnd||1}`).join('\n');}
+// Quotes are sliced from the retrieved original, never composed by the model.
+// Chinese uses word segmentation; English keeps punctuation and original casing.
+export function evidenceOpening(text, limit=10) {
+ const source=String(text||'').replace(/^#{1,6}[^\n]*\n/gm,'').trim();
+ if(!source)return '';
+ const sentence=[...new Intl.Segmenter(undefined,{granularity:'sentence'}).segment(source)][0]?.segment.trim()||source;
+ const words=/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Thai}]/u.test(sentence)
+  ? [...new Intl.Segmenter(undefined,{granularity:'word'}).segment(sentence)].filter(s=>s.isWordLike)
+  : [...sentence.matchAll(/\S+/g)].filter(s=>/[\p{L}\p{N}]/u.test(s[0]));
+ return words.length>limit?sentence.slice(0,words[limit].index).trimEnd()+'...':sentence;
+}
+const escapeQuote=text=>text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/([\\`*_{}\[\]])/g,'\\$1').replace(/\s+/g,' ');
+export function evidenceLocations(answer,evidence,language='zh'){const sources=validateEvidenceAnswer(answer,evidence);if(!sources.length)return answer;return answer+'\n\n'+(language==='en'?'Sources:':'证据来源：')+'\n\n'+sources.map(e=>`- [${e.id}] ${e.title||e.fileName} · ${e.section||'unknown'} · ${e.page?(language==='en'?`PDF page ${e.page}`:`PDF 第 ${e.page} 页`):(language==='en'?'Markdown':'MD')} · ${language==='en'?'lines':'行'} ${e.lineStart||1}–${e.lineEnd||1}${e.text?`\n  ${language==='en'?'Original':'原句'}：“${escapeQuote(evidenceOpening(e.text))}”`:''}`).join('\n');}

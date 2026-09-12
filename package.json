@@ -1,6 +1,6 @@
 {
   "name": "litgraph",
-  "version": "1.2.1",
+  "version": "1.2.4",
   "description": "Local-first literature visualization and evidence-grounded research workspace",
   "author": "LitGraph contributors",
   "main": "desktop/main.mjs",
@@ -36,6 +36,7 @@
       "scripts/local-service.js",
       "scripts/rag-vector-service.mjs",
       "scripts/rag-vector-worker.mjs",
+      "scripts/rag-index.mjs",
       "scripts/scholarly-service.js",
       "scripts/public-fetch.js",
       "scripts/scansci-service.js",
@@ -48,6 +49,7 @@
       "src/research-evidence.js",
       "src/research-embedding.js",
       "src/settings-reset.js",
+      "src/research-scope.js",
       "docs/**/*.md",
       "LICENSE",
       "PRIVACY.md",

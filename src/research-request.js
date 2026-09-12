@@ -26,6 +26,7 @@ export class ResearchRequest {
     this.stage = 'preparing';
     this.stageStartedAt=this.now();
     this.timings={};
+    this.partial='';this.lastPartialAt=0;
     this.onChange(this, 'state');
     this.timer = setInterval(() => this.onChange(this, 'tick'), 1000);
     try {
@@ -33,7 +34,7 @@ export class ResearchRequest {
         if(generation!==this.generation)return;
         const now=this.now();this.timings[this.stage]=(this.timings[this.stage]||0)+now-this.stageStartedAt;
         this.stage=stage;this.stageStartedAt=now;this.onChange(this,'tick');
-      });
+      }, text=>{if(generation!==this.generation||this.controller.signal.aborted)return;this.partial=text;const now=this.now();if(now-this.lastPartialAt>80){this.lastPartialAt=now;this.onChange(this,'tick');}});
       if (generation !== this.generation) return;
       this.elapsedMs = this.elapsed();
       this.timings[this.stage]=(this.timings[this.stage]||0)+this.now()-this.stageStartedAt;

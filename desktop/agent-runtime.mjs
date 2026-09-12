@@ -58,7 +58,7 @@ function terminate(child) {
   else { try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); } }
 }
 
-export async function runAgent({ provider, executable, messages, maxTokens, mode, signal, cwd, proxyEnv = {}, timeoutMs = 600000, launch = spawn }) {
+export async function runAgent({ provider, executable, messages, maxTokens, mode, signal, cwd, onPartial, proxyEnv = {}, timeoutMs = 600000, launch = spawn }) {
   signal?.throwIfAborted();
   const { args, prompt } = invocation(provider, messages, maxTokens, mode);
   return new Promise((resolve, reject) => {
@@ -72,7 +72,8 @@ export async function runAgent({ provider, executable, messages, maxTokens, mode
     signal?.addEventListener('abort', cancel, { once: true });
     if (signal?.aborted) cancel();
     child.stdout.setEncoding('utf8');
-    child.stdout.on('data', chunk => { length += Buffer.byteLength(chunk); if (length > 4 * 1024 * 1024) stop(Error('Agent response exceeds 4 MB.')); else stdout += chunk; });
+    let eventBuffer='';
+    child.stdout.on('data', chunk => { length += Buffer.byteLength(chunk); if (length > 4 * 1024 * 1024) stop(Error('Agent response exceeds 4 MB.')); else {stdout += chunk;if(provider==='codex'&&onPartial){eventBuffer+=chunk;let end;while((end=eventBuffer.indexOf('\n'))>=0){const line=eventBuffer.slice(0,end);eventBuffer=eventBuffer.slice(end+1);try{const e=JSON.parse(line);if(['item.updated','item.completed'].includes(e.type)&&e.item?.type==='agent_message'&&typeof e.item.text==='string')onPartial(e.item.text);}catch{}}}} });
     // Do not persist or return raw diagnostics: they can contain authentication
     // URLs, local user paths or echoed original text.
     child.stderr.on('data', () => {});
@@ -96,11 +97,11 @@ export async function createAgentRuntime(dataRoot, { execute = runAgent, discove
   try { const stored = JSON.parse(await readFile(configPath, 'utf8')); if (providers[stored.provider] && stored.enabled === true) config = stored; } catch {}
   const status = () => ({ managed: true, configured: Boolean(config), connected: Boolean(config) && !closed, connectionId: config ? connectionId : null, model: config ? `${providers[config.provider]} · CLI` : '', provider: config?.provider || '', vision: false, queued: queue.length, processing: Boolean(running), connecting });
   const persist = async value => { await mkdir(dataRoot, { recursive: true }); await writeFile(configPath + '.tmp', JSON.stringify(value), { mode: 0o600 }); await rename(configPath + '.tmp', configPath); };
-  async function perform(selected, messages, maxTokens, signal, limit) {
+  async function perform(selected, messages, maxTokens, signal, limit,onPartial) {
     const executable = selected.executable || await discover(selected.provider);
     const cwd = path.join(workRoot, randomUUID());
     await mkdir(cwd, { recursive: true });
-    try { return await execute({ ...selected, executable, messages, maxTokens, signal, cwd, proxyEnv: await getProxyEnv(selected.provider), timeoutMs: limit }); }
+    try { return await execute({ ...selected, executable, messages, maxTokens, signal, cwd,onPartial, proxyEnv: await getProxyEnv(selected.provider), timeoutMs: limit }); }
     finally { // Only this generated task directory is removed; never a user path.
       if (path.dirname(cwd) === workRoot) await rm(cwd, { recursive: true, force: true }).catch(() => {});
     }
@@ -109,7 +110,7 @@ export async function createAgentRuntime(dataRoot, { execute = runAgent, discove
     if (running || closed || !queue.length) return;
     const task = queue.shift(); running = task;
     task.onStart?.();
-    task.finished = perform(task.config, task.messages, task.maxTokens, task.controller.signal, timeoutMs).then(task.resolve, task.reject).finally(() => { task.cleanup(); running = null; drain(); });
+    task.finished = perform(task.config, task.messages, task.maxTokens, task.controller.signal, timeoutMs,task.onPartial).then(task.resolve, task.reject).finally(() => { task.cleanup(); running = null; drain(); });
   }
   return {
     status,
@@ -129,13 +130,13 @@ export async function createAgentRuntime(dataRoot, { execute = runAgent, discove
         await persist(selected); config = selected; connectionId = randomUUID(); return { ...status(), connecting: false };
       } finally { connecting = false; }
     },
-    submit(messages, maxTokens, signal, onStart, mode = 'quick') {
+    submit(messages, maxTokens, signal, onStart, mode = 'quick',onPartial) {
       signal?.throwIfAborted();
       if (!config || closed || connecting) return Promise.reject(Error('Connect the external agent first.'));
       invocation(config.provider, messages, maxTokens);
       if (queue.length + Number(Boolean(running)) >= 8) return Promise.reject(Error('Agent queue is full. Wait or cancel a task.'));
       return new Promise((resolve, reject) => {
-        const task = { config: { ...config, mode: mode === 'expert' ? 'expert' : 'quick' }, messages, maxTokens, resolve, reject, onStart, controller: new AbortController() };
+        const task = { config: { ...config, mode: mode === 'expert' ? 'expert' : 'quick' }, messages, maxTokens, resolve, reject, onStart,onPartial, controller: new AbortController() };
         const cancel = () => { task.controller.abort(); const index = queue.indexOf(task); if (index >= 0) { queue.splice(index, 1); task.cleanup(); reject(abortError()); } };
         task.cleanup = () => signal?.removeEventListener('abort', cancel);
         signal?.addEventListener('abort', cancel, { once: true });

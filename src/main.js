@@ -21,14 +21,16 @@ import { capture2dFraming, match2dFraming } from './camera-framing.js';
 import { closerCamera, navigationKeys, translateCamera } from './camera-navigation.js';
 import { framePerspectiveModel, initialFramingPoints } from './perspective-framing.js';
 import { readAIResponse, researchTokenBudget } from './ai-response.js';
+import {createTextStream,partialAnswer} from './ai-stream.js';
 import { normalizeResearchMode, researchModePolicy, researchThinkingOptions, compatibleModelBody } from './research-mode.js';
 import { researchMessages } from './research-agent.js';
 import { ResearchRequest, formatResearchDuration } from './research-request.js';
+import {researchChatKey} from './research-scope.js';
 import { externalState, refreshExternal, externalInstructions, externalCompletion, localRequest, copyTextToClipboard } from './external-agent.js';
 import { extractFile, saveFulltext, saveOriginalFile, prepareEvidence, imageAttachment, withImages, originalBlob, getFulltext } from './fulltext.js';
 import { HISTORY_KEY, restoreJobs, createImportJob, jobCounts, moveTab, processImportItem, processImportBatch, setImportCanvasVisibility } from './import-jobs.js';
 import { paperAnalysisMessages, validatePaperAnalysis } from './paper-analysis.js';
-import { shouldRefreshLocalMetadata } from './local-metadata.js';
+import { shouldRefreshLocalMetadata, extractSourceMetadata, applySourceMetadata, verifiedModelMetadata, metadataFrontmatter, SOURCE_METADATA_VERSION } from './local-metadata.js';
 import { messageMarkdown } from './message-markdown.js';
 import { selectEvidence } from './research-evidence.js';
 import { validateEvidenceAnswer } from './research-evidence.js';
@@ -280,15 +282,18 @@ app.innerHTML = `
         <header><div><h2 id="api-dialog-title">模型接入</h2><p>连接外部 Agent 或模型 API，开始检索与研究。</p></div><button type="button" data-close-modal="api" aria-label="关闭">×</button></header>
         <form id="api-form">
           <section class="external-agent-section" aria-labelledby="external-agent-label">
-            <h3 id="external-agent-label">方式2：外部 Agent <span>例如 Codex · Claude Code 等</span></h3>
-            <p class="external-agent-help">登录官方 Codex或 Claude Code。点击连结并验证。连接成功后，检索、论文分析和研究问答会按需调用。</p>
-            <div class="external-agent-row agent-runtime-controls"><select id="agent-runtime-provider" aria-label="外部 Agent 工具"><option value="codex">Codex CLI</option><option value="claude">Claude Code</option></select><button id="connect-agent-runtime" type="button">连结并验证</button><button id="choose-agent-runtime" type="button">选择程序</button></div>
+            <h3 id="external-agent-label">方式2：外部 Agent</h3>
+            <p class="external-agent-help">先登录官方 Codex 或 Claude Code，再测试并保存。连接后，检索、论文分析和研究问答会按需调用。</p>
+            <label for="agent-runtime-provider">外部 Agent 工具</label>
+            <div class="external-agent-row agent-runtime-controls"><select id="agent-runtime-provider" aria-describedby="agent-error"><option value="codex">Codex CLI</option><option value="claude">Claude Code</option></select><button id="choose-agent-runtime" type="button">选择程序</button></div>
             <details class="manual-agent-access"><summary>其他工具：手动 MCP 接入</summary><div class="external-agent-row"><p>仅用于能持续处理 MCP 任务的工具；普通 MCP 连接无法自动唤醒聊天会话。</p><button id="copy-agent-instructions" type="button">复制文本</button></div></details>
             <div class="external-agent-status" id="external-agent-status" role="status"></div>
-            <button id="disconnect-agent" type="button" hidden>断开外部 Agent</button>
+            <div class="form-error" id="agent-error" role="alert" tabindex="-1" hidden></div>
+            <footer><button id="disconnect-agent" type="button" hidden>断开外部 Agent</button><button class="primary" id="connect-agent-runtime" type="button">测试并保存</button></footer>
           </section>
-          <div class="connection-method-heading"><h3 class="connection-method-title">方式1：API</h3><button id="delete-api-config" type="button">删除该配置</button></div>
-          <p class="api-provider-help">支持 OpenAI、Claude、智谱、Kimi、Qwen、DeepSeek 与豆包。密钥仅保存在当前设备。</p>
+          <section class="api-method-section" aria-labelledby="api-method-label">
+          <div class="connection-method-heading"><h3 class="connection-method-title" id="api-method-label">方式1：API <span class="connection-recommended">推荐</span></h3><button id="delete-api-config" type="button">删除该配置</button></div>
+          <p class="api-provider-help">支持 OpenAI、Claude、Deepseek、Qwen等。密钥仅保存在当前设备。</p>
           <label for="api-endpoint">API 地址 (Base URL)</label><input id="api-endpoint" name="endpoint" type="url" autocomplete="off" spellcheck="false" required aria-describedby="api-error" value="">
           <label for="api-key">API Key</label><div class="secret-input"><input id="api-key" name="api-key" type="password" autocomplete="off" spellcheck="false" required aria-describedby="api-error"><button id="toggle-api-key" type="button" aria-label="显示 API Key" aria-pressed="false">显示</button></div>
           <label for="api-model">模型</label><select id="api-model" name="model" required aria-describedby="api-error">${MODEL_OPTIONS}</select>
@@ -296,6 +301,7 @@ app.innerHTML = `
           <label class="api-vision-option"><input id="api-vision" type="checkbox">当前模型支持图片输入（请根据服务商说明确认）</label>
           <div class="form-error" id="api-error" role="alert" tabindex="-1" hidden></div>
           <footer><button type="button" data-close-modal="api">取消</button><button class="primary" id="test-api-button" type="submit">测试并保存</button></footer>
+          </section>
         </form>
       </section>
     </div>
@@ -622,7 +628,7 @@ function updateResearchEntry() {
 async function callAI(messages, config = aiConfig, maxTokens = 240, options = {}) {
   if (!options.connectionTest && (config?.provider === 'external-agent' || (config === aiConfig && externalState().connected))) {
     await localRequest('context', agentPageContext());
-    return externalCompletion(messages, maxTokens, options.signal, options.researchMode);
+    return externalCompletion(messages, maxTokens, options.signal, options.researchMode,options.onText);
   }
   if (!config?.endpoint || !config?.apiKey || !config?.model) throw new Error(panelText('AI API 尚未配置', 'AI API is not configured'));
   const endpoint = config.endpoint.replace(/\/+$/, '');
@@ -655,12 +661,19 @@ async function callAI(messages, config = aiConfig, maxTokens = 240, options = {}
     if (controls.thinking?.type === 'enabled') delete body.temperature;
   }
   compatibleModelBody(body,config,protocol,options);
+  if(options.onText)body.stream=true;
+  const streaming=options.onText?createTextStream(options.onText):null;
   const response = await modelFetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
-    signal: options.signal
+    signal: options.signal,
+    onChunk:streaming?text=>streaming.push(text):undefined
   });
+  if(streaming&&response.ok&&response.headers.get('content-type')?.includes('text/event-stream')){
+    if(!desktop){const reader=response.body.getReader(),decoder=new TextDecoder();try{while(true){options.signal?.throwIfAborted();const {done,value}=await reader.read();if(done)break;streaming.push(decoder.decode(value,{stream:true}));}streaming.push(decoder.decode());}finally{reader.releaseLock();}}
+    return streaming.finish();
+  }
   return readAIResponse(response, protocol);
 }
 
@@ -773,15 +786,17 @@ function clusterPoint(node) {
 }
 
 function publicationValue(node) {
-  return Number(node.year) + (Math.max(1, Math.min(12, Number(node.month) || 6)) - 1) / 12;
+  return node.year ? Number(node.year) + (Math.max(1, Math.min(12, Number(node.month) || 6)) - 1) / 12 : NaN;
 }
 
 function yearPosition(value) {
-  const years = nodes.map(publicationValue);
+  const years = nodes.filter(n=>!n.importCanvasHidden).map(publicationValue).filter(Number.isFinite);
+  if(!years.length)return 0;
   const min = Math.floor(Math.min(...years));
   const max = Math.ceil(Math.max(...years));
   if (min === max) return 0;
   const span = Math.max(60, (max - min) * (settings().yearSpacing || 100));
+  if(!Number.isFinite(value))return span/2+(settings().yearSpacing||100);
   return -span / 2 + ((value - min) / (max - min)) * span;
 }
 
@@ -1092,7 +1107,7 @@ function renderedNodeRadius(node) {
 
 function drawYearGuides() {
   if (view !== 'timeline' || !settings().showYearAxis) return;
-  const years = [...new Set(nodes.map((node) => node.year))].sort((a, b) => a - b);
+  const years = [...new Set(nodes.filter(n=>!n.importCanvasHidden&&n.year).map((node) => node.year))].sort((a, b) => a - b);
   const left = screenToWorld(0, 0).x;
   const right = screenToWorld(width, 0).x;
   context.save();
@@ -1256,7 +1271,7 @@ function drawNodeLabel(node, hovered = false) {
   const shortAuthors = authors.length > 26 ? `${authors.slice(0, 26)}…` : authors;
   let title;
   if (settings().paperLabelMode === 'authors-year') title = paperAuthorYearLabel(node);
-  else if (settings().paperLabelMode === 'year-authors') title = `${node.year} · ${shortAuthors}`;
+  else if (settings().paperLabelMode === 'year-authors') title = `${node.year || panelText('年份未知','n.d.')} · ${shortAuthors}`;
   else title = node.title.length > 38 ? `${node.title.slice(0, 38)}…` : node.title;
   const fontSize = (9.5 * settings().paperLabelSize / 100) / Math.sqrt(camera.k);
   context.font = `400 ${fontSize}px ${CANVAS_FONT_STACK}`;
@@ -1324,8 +1339,7 @@ function render() {
 function updateGraphLegend() {
   const keyHint = document.querySelector('#graph-3d-keys');
   keyHint.hidden = renderMode !== '3d' || view === 'table';
-  keyHint.innerHTML = `<span><kbd>W</kbd><kbd>↑</kbd> ${panelText('前进', 'Forward')}</span><span><kbd>S</kbd><kbd>↓</kbd> ${panelText('后退', 'Back')}</span><span><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> ${panelText('左右平移', 'Strafe')}</span>`;
-  if (view === 'timeline') keyHint.innerHTML = `<span>${panelText('左拖平移 · 右拖观察 · 滚轮缩放', 'Left drag: pan · Right drag: orbit · Wheel: zoom')}</span><span>${panelText('WASD / 方向键移动', 'WASD / Arrows: move')}</span>`;
+  keyHint.innerHTML = `<span>${panelText('拖动空白 / 右键：平移','Drag background / right button: pan')}</span><span>${panelText('Shift＋拖动：旋转','Shift + drag: rotate')}</span><span><kbd>W</kbd><kbd>↑</kbd> ${panelText('前进', 'Forward')}</span><span><kbd>S</kbd><kbd>↓</kbd> ${panelText('后退', 'Back')}</span><span><kbd>A</kbd><kbd>D</kbd> / <kbd>←</kbd><kbd>→</kbd> ${panelText('左右平移', 'Strafe')}</span>`;
   const palette = EDGE_PALETTES[settings().edgePalette] || EDGE_PALETTES.e0;
   const legend = document.querySelector('.graph-legend');
   if (!legend) return;
@@ -1500,7 +1514,7 @@ function updateGraph3dYearGuides(THREE, SpriteText, data) {
     graph3dYearGuideGroup = null;
   }
   if (view !== 'timeline' || !settings().showYearAxis) return;
-  const years = [...new Set(nodes.map((node) => Number(node.year)).filter(Number.isFinite))].sort((a, b) => a - b);
+  const years = [...new Set(nodes.filter(n=>!n.importCanvasHidden&&n.year).map((node) => Number(node.year)).filter(Number.isFinite))].sort((a, b) => a - b);
   if (!years.length) return;
   const halfSize = yearGuideHalfSize(data);
   const group = new THREE.Group();
@@ -2111,19 +2125,18 @@ function researchTabNodes(tab) {
 }
 
 function researchTabChatKey(tab) {
-  let legacy;
-  if (tab.type === 'paper') legacy = `litgraph.chat.paper.${tab.nodeIds[0]}`;
-  else if (tab.type === 'selected') legacy = `litgraph.chat.selection.${[...tab.nodeIds].sort().join('.')}`;
-  else legacy = `litgraph.chat.project.${String(project.meta?.title || 'default').replace(/\W+/g, '-').slice(0, 48)}`;
-  const key = `litgraph.chat.v2.${currentProjectId}.${tab.type}.${[...(tab.nodeIds || [])].sort().join('.')}`;
-  // Claim legacy history only once, avoiding collisions between different projects.
-  if (!localStorage.getItem(key) && localStorage.getItem(legacy) && !localStorage.getItem(`${legacy}.migrated`)) {
-    localStorage.setItem(key, localStorage.getItem(legacy)); localStorage.setItem(`${legacy}.migrated`, currentProjectId);
-  }
-  return key;
+  // Unscoped legacy history is retained, never attributed to a new project.
+  return researchChatKey(currentProjectId,tab);
+}
+
+function leaveResearchProject(){
+ for(const [key,run] of researchRequests)if(key.startsWith(`litgraph.chat.v2.${currentProjectId}.`))run.pause();
+ localStorage.setItem(`litgraph.researchTabs.${currentProjectId}`,JSON.stringify(researchTabs));
+ closeResearchWindow();researchTabs=[];activeResearchTabId='project';
 }
 
 function ensureResearchTab(node = null) {
+  if(!researchTabs.length){try{const saved=JSON.parse(localStorage.getItem(`litgraph.researchTabs.${currentProjectId}`)||'[]'),ids=new Set(nodes.map(n=>n.id));researchTabs=saved.filter(t=>['project','paper','selected'].includes(t.type)&&(t.nodeIds||[]).every(id=>ids.has(id)));}catch{researchTabs=[];}}
   if (!researchTabs.some((tab) => tab.id === 'project')) researchTabs.unshift(projectResearchTab());
   let requested = researchTabs.find((tab) => tab.id === 'project');
   if (node) {
@@ -2212,11 +2225,11 @@ function updateResearchSendButton(element, chatKey) {
 function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode = 'quick') {
   const config = activeAIConfig();
   const mode = normalizeResearchMode(requestedMode);
-  const run = new ResearchRequest(async (signal, onStage) => {
+  const run = new ResearchRequest(async (signal, onStage, onPartial) => {
     const { messages: requestMessages, evidence } = await buildMessages(signal, config, mode, onStage);
     onStage('generating');
     let answer;
-    try { answer = await callAI(requestMessages, config, researchTokenBudget(config, mode), { signal, json: true, researchMode: mode }); }
+    try { answer = await callAI(requestMessages, config, researchTokenBudget(config, mode), { signal, json: true, researchMode: mode,onText:raw=>onPartial(partialAnswer(raw)) }); }
     catch (error) {
       if (error.name === 'TypeError') throw new Error(panelText('无法连接模型服务，请检查网络、API 地址及浏览器跨域权限后重试', 'Cannot reach the model service. Check your network, API URL and CORS permissions.'));
       throw error;
@@ -2233,6 +2246,7 @@ function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode
       if (windowMatches) {
         const status = deepReadWindow.querySelector('[data-research-progress] p');
         if (status) status.textContent = researchRunText(state);
+        if(state.partial){let preview=deepReadWindow.querySelector('[data-stream-preview]');if(!preview){preview=document.createElement('div');preview.dataset.streamPreview='';preview.className='message-markdown';status?.after(preview);}preview.innerHTML=messageMarkdown(state.partial);}
       }
       return;
     }
@@ -2279,9 +2293,10 @@ function submitResearchQuestion(element, tab, chatKey) {
   const requestedMode = normalizeResearchMode(element.querySelector('#research-response-mode').value);
   recordUse('question');
   const buildMessages = async (signal, config, mode, onStage) => {
-    onStage(mode === 'expert' || needsModelQueryPlan(question,scopedNodes,priorMessages) ? 'rewriting' : 'preparing');
-    const plan = mode === 'quick' && !needsModelQueryPlan(question,scopedNodes,priorMessages) ? quickQueryPlan(question, priorMessages) : await planResearchQuery(question,{history:priorMessages,nodes:scopedNodes,signal,identity:JSON.stringify([config.provider,config.model,config.endpoint]),generate:messages=>callAI(messages,config,1500,{json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(45000)])})});
-    const context = await prepareEvidence(scopedNodes, question, attachments, signal, retrievalPolicy(plan,scopedNodes.length,mode).budget,plan,{topK:retrievalPolicy(plan,scopedNodes.length,mode).topK,onStage});
+    onStage(mode === 'expert' ? 'rewriting' : 'preparing');
+    const plan = mode === 'quick' ? quickQueryPlan(question, priorMessages) : await planResearchQuery(question,{history:priorMessages,nodes:scopedNodes,signal,identity:JSON.stringify([config.provider,config.model,config.endpoint]),generate:messages=>callAI(messages,config,1000,{json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(8000)])})});
+    const policy=retrievalPolicy(plan,scopedNodes.length,mode);
+    const context = await prepareEvidence(scopedNodes, question, attachments, signal, policy.budget,plan,{topK:policy.topK,retrievalTimeoutMs:policy.retrievalTimeoutMs,onStage});
     if (context.retrieval?.warning || plan.degraded) toast(panelText('部分检索增强不可用，本次使用可用检索路径。','Some retrieval enhancements are unavailable; using available search paths.'));
     const textMessages = researchMessages(scopedNodes, priorMessages, question, context, mode);
     return { messages: withImages(textMessages, attachments.filter(a => a.image).map(a => a.image), config.protocol || 'openai-chat'), evidence: context.evidence };
@@ -2459,6 +2474,8 @@ function openDeepReadWindow(node = null) {
   element.innerHTML = `<header class="summary-window-header"><div class="research-desk-title"><img class="tool-window-logo" src="${BRAND_MARK}" alt=""><div><strong>${panelText('研究空间', 'Research space')}</strong><span class="research-desk-subtitle">${panelText('回答以原文证据为依据，AI 推断会额外标出。', 'Answers are grounded in source evidence; AI inferences are explicitly marked.')}</span><span data-desk-context hidden></span></div></div><div class="window-controls"><button type="button" data-close aria-label="${panelText('关闭研究空间', 'Close research space')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div></header><div class="deep-read-body"></div>`;
   floatingWindowLayer.appendChild(element);
   element.disposeWindow = mountResearchWindow(element, floatingWindowLayer);
+  // Warm older documents without adding a maintenance task to the research UI.
+  void localRequest('vector-index',{operation:'enqueue',documents:nodes.filter(n=>!n.importCanvasHidden&&n.fulltextKey).map(n=>({key:n.fulltextKey,node:{id:n.id,title:n.title,authors:n.authors,year:n.year}}))}).catch(()=>{});
   let dragDepth = 0;
   element.addEventListener('dragenter', event => { if (![...event.dataTransfer.types].includes('Files')) return; event.preventDefault(); event.stopPropagation(); dragDepth++; element.classList.add('receiving-files'); });
   element.addEventListener('dragover', event => { if (![...event.dataTransfer.types].includes('Files')) return; event.preventDefault(); event.stopPropagation(); event.dataTransfer.dropEffect = 'copy'; });
@@ -2490,7 +2507,7 @@ function renderInspector(node) {
     <button id="delete-inspector-paper" class="inspector-delete-action" type="button">${panelText('删除该文献','Delete this paper')}</button>
     <div class="paper-hero">
       <div class="paper-badges">
-        <span class="badge badge-year"><b>${panelText('年份', 'Year')}：</b>${node.year}</span>
+        <span class="badge badge-year"><b>${panelText('年份', 'Year')}：</b>${node.year || panelText('未知','Unknown')}</span>
         <span class="badge badge-journal"><b>${panelText('期刊', 'Journal')}：</b>${escapeHtml(node.journal || panelText('未知', 'Unknown'))}</span>
         <span class="badge badge-type"><b>${panelText('类型', 'Type')}：</b>${escapeHtml(node.articleType || panelText('研究文章', 'Research article'))}</span>
         <span class="badge badge-keyword keyword-badge"><b>${panelText('关键词', 'Keywords')}：</b>${escapeHtml(keywordText)}</span>
@@ -2726,12 +2743,13 @@ function renderSecondaryPanel() {
       <button type="button" data-workspace-action="import"><span><strong>${panelText('导入项目数据', 'Import project data')}</strong><small>LitGraph JSON</small></span></button>
       <button type="button" data-workspace-action="export"><span><strong>${panelText('导出项目数据', 'Export project data')}</strong><small>LitGraph JSON</small></span></button>
       <button type="button" data-workspace-action="data-folder"><span><strong>${panelText('数据文件夹', 'Data folder')}</strong><small>${panelText('原文、MD、分析与项目数据', 'Originals, Markdown, analysis and project data')}</small></span></button>
+      <button type="button" data-workspace-action="reset-settings"><span><strong>${panelText('还原所有设置', 'Reset all settings')}</strong><small>${panelText('清除连接和界面设置，保留全部研究数据', 'Reset connections and preferences; keep all research data')}</small></span></button>
+      <button type="button" class="danger" data-workspace-action="clear-data"><span><strong>${panelText('清除数据', 'Clear data')}</strong><small>${panelText('清除本地研究数据，自带样例始终保留', 'Clear local research data; bundled sample is always retained')}</small></span></button>
       <p>${panelText('连接与应用', 'Connections & app')}</p>
       <button type="button" data-workspace-action="api"><span><strong>${panelText('模型接入', 'AI connection')}</strong><small>${panelText('配置模型、API 地址与密钥', 'Configure model, API URL and key')}</small></span></button>
       <a href="https://litgraph.aobi.qzz.io/" target="_blank" rel="noopener noreferrer"><span><strong>${panelText('产品网站', 'Product website')}</strong><small>${panelText('了解产品与下载使用', 'Explore LitGraph and download the app')}</small></span></a>
       <button type="button" data-workspace-action="about"><span><strong>${panelText('关于 LitGraph', 'About LitGraph')}</strong><small>Version ${APP_VERSION}</small></span></button>
       <a href="https://my.feishu.cn/share/base/form/shrcnbw8bQOlnsv8EXdKFaXnoIy" target="_blank" rel="noopener noreferrer"><span><strong>${panelText('用户反馈', 'User feedback')}</strong><small>${panelText('反馈问题或分享使用建议', 'Report an issue or share a suggestion')}</small></span></a>
-      <button type="button" data-workspace-action="reset-settings"><span><strong>${panelText('还原所有设置', 'Reset all settings')}</strong><small>${panelText('清除连接和界面设置，保留全部研究数据', 'Reset connections and preferences; keep all research data')}</small></span></button>
     </div>`;
   } else if (activePanel === 'literature-discovery') {
     body = `<div class="discovery-panel">
@@ -3480,7 +3498,7 @@ function renderProjectSelectorMenu() {
   if (!menu) return;
   const projects = Object.values(projectLibrary).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
   menu.innerHTML = `<p>${panelText('已有项目', 'Projects')}</p>
-    <div class="saved-project-list">${projects.map((entry) => `<button type="button" role="menuitem" data-project-id="${escapeHtml(entry.id)}" class="${entry.id === currentProjectId ? 'current' : ''}"><span>${escapeHtml(entry.title)}</span><i>${entry.data?.nodes?.length || 0} ${panelText('篇', 'papers')}</i></button>`).join('')}</div>
+    <div class="saved-project-list">${projects.map((entry) => `<button type="button" role="menuitem" data-project-id="${escapeHtml(entry.id)}" class="${entry.id === currentProjectId ? 'current' : ''}"><span>${escapeHtml(entry.title)}</span><i>${(entry.id === currentProjectId ? nodes : entry.data?.nodes || []).filter(n=>!n.importCanvasHidden).length} ${panelText('篇', 'papers')}</i></button>`).join('')}</div>
     <div class="project-menu-divider"></div>
     <button type="button" role="menuitem" data-project-action="new">${panelText('新建项目', 'New project')}</button>
     <button type="button" role="menuitem" data-project-action="rename">${panelText('重命名当前项目', 'Rename current project')}</button>
@@ -3492,6 +3510,7 @@ function activateProjectData(candidate, id = candidate.meta?.id || `project-${Da
   discoveryResults=[];discoverySelected.clear();discoveryStep='search';activeDiscoveryJobId=null;filterState.journals=[];
   discoveryNotice='';discoveryProgress='';pendingInstitutionNode=null;expandedHistoryJobs.clear();
   validateImportedProject(candidate);
+  leaveResearchProject();
   simulation.stop();
   project = refreshSampleNodes(JSON.parse(JSON.stringify(candidate)), sampleProjectSource);
   currentProjectId = id;
@@ -3532,6 +3551,7 @@ function activateProjectData(candidate, id = candidate.meta?.id || `project-${Da
   saveCurrentProject();
   renderLiteratureDiscoveryWindow();renderPaperImportHistory();
   const initialProjectId=currentProjectId;
+  void repairProjectSourceMetadata();
   window.setTimeout(() => {
     // A deferred 2D project fit must never override a 3D camera selected meanwhile.
     if(currentProjectId===initialProjectId && renderMode==='2d')fitView(420);
@@ -3581,6 +3601,7 @@ function createBlankProject({ savePrevious = true } = {}) {
   discoveryResults=[];discoverySelected.clear();discoveryStep='search';activeDiscoveryJobId=null;filterState.journals=[];
   discoveryNotice='';discoveryProgress='';pendingInstitutionNode=null;expandedHistoryJobs.clear();
   if (savePrevious) saveCurrentProject();
+  leaveResearchProject();
   simulation.stop();
   currentProjectId = `project-${Date.now()}`;
   project = {
@@ -3711,8 +3732,8 @@ function applyScholarlyMetadata(node, metadata) {
     node.abstractRetrievedAt = new Date().toISOString().slice(0, 10);
   }
   node.openAlexId = metadata.openAlexId || node.openAlexId;
-  node.metadataSource = metadata.metadataSource || 'OpenAlex';
-  node.metadataSources = metadata.metadataSources || [node.metadataSource];
+  node.metadataSource = metadata.metadataSource || (metadata.openAlexId ? 'OpenAlex' : '');
+  node.metadataSources = metadata.metadataSources || (node.metadataSource ? [node.metadataSource] : []);
   node.referenceOpenAlexIds = metadata.references;
   node.referenceDois = metadata.referenceDois || [];
   node.referenceRecords = metadata.referenceRecords || [];
@@ -3757,7 +3778,7 @@ function nodeFromScholarlyMetadata(metadata, index) {
   const y = Math.sin(angle) * (45 + ordinal * 4);
   return applyScholarlyMetadata({
     id, title: metadata.title || panelText('未命名论文', 'Untitled paper'), authors: [],
-    year: metadata.year || new Date().getFullYear(), month: 6,
+    year: metadata.year || null, month: 6,
     language: metadata.language || (/[\u3400-\u9fff]/.test(metadata.title || '') ? 'zh' : 'en'),
     primaryTheory: 'unclassified', secondaryTheories: [], citations: 0, impact: 0,
     theoryStrength: .55, claimLabel: metadata.title || '', claimLabelEn: metadata.title || '',
@@ -4221,16 +4242,32 @@ function saveImportProgress(job, node, item) {
   if (selectedNode?.id === node.id) renderInspector(node);
 }
 async function refreshLocalMetadata(node, document, signal) {
-  if(!shouldRefreshLocalMetadata(node) || !document?.markdown)return;
-  const firstPages=document.markdown.split(/## PDF Page 3\b/)[0].slice(0,14000);
-  const doi=normalizedDoi(firstPages.match(/10\.\d{4,9}\/[\w.()/:;-]+/i)?.[0]||'');
-  node.doi=doi || normalizedDoi(node.doi);
+  if(!document?.markdown)return;
+  applySourceMetadata(node,extractSourceMetadata(document.markdown));
+  if(!shouldRefreshLocalMetadata(node))return;
+  node.doi=normalizedDoi(node.doi);
   try {
     const {metadata}=await localRequest('metadata',{doi:node.doi,title:node.title},{signal});
     if(metadata){applyScholarlyMetadata(node,metadata);node.metadataWarning='';}
     else node.metadataWarning=panelText('暂未找到精确匹配的学术记录，被引量保持未知。','No exact scholarly record found; citation count remains unknown.');
   } catch(error){signal.throwIfAborted();node.metadataWarning=localizedError(error,language);}
   node.metadataChecked=true;rebuildMetadataCitationLinks();
+}
+async function repairProjectSourceMetadata() {
+  const projectId=currentProjectId,scope=nodes;
+  let changed=0;
+  for(const node of scope){
+    if(currentProjectId!==projectId||nodes!==scope)return;
+    if(!node.importedLocally||node.importCanvasHidden||node.sourceMetadataVersion===SOURCE_METADATA_VERSION)continue;
+    try{
+      const original=await getFulltext(node);
+      if(currentProjectId!==projectId||nodes!==scope)return;
+      if(!original?.markdown)continue;
+      applySourceMetadata(node,extractSourceMetadata(original.markdown));changed++;
+    }catch{/* A missing original must not block other records. */}
+    if(changed&&changed%20===0){saveCurrentProject();await new Promise(resolve=>setTimeout(resolve,0));}
+  }
+  if(changed&&currentProjectId===projectId&&nodes===scope){saveCurrentProject();render();if(selectedNode)renderInspector(selectedNode);}
 }
 async function analyzeOriginal(node, signal) {
   await refreshLocalMetadata(node,await getFulltext(node),signal);
@@ -4251,10 +4288,14 @@ async function analyzeOriginal(node, signal) {
     if (peers.length >= 6) break;
   }
   const answerLanguage = language;
-  const raw = await callAI(paperAnalysisMessages(node,text,peers,project.theories,answerLanguage), activeAIConfig(), 5000,
+  const analysisMessages=paperAnalysisMessages(node,text,peers,project.theories,answerLanguage);
+  analysisMessages[0].content+=' Also return an optional bibliography object: {"title":{"value":"original title","quote":"exact title passage"},"authors":[{"name":"paper author, not supervisor","quote":"exact byline passage"}],"year":{"value":2024,"quote":"exact publication or thesis date passage"}}. Use only supplied frontmatter, not reference entries or grants/received dates. Omit uncertain fields. Do not infer citation counts. Quotes must be literal source passages.';
+  const analysisInput=JSON.parse(analysisMessages[1].content);analysisInput.frontmatter=metadataFrontmatter(document.markdown);analysisMessages[1].content=JSON.stringify(analysisInput);
+  const raw = await callAI(analysisMessages, activeAIConfig(), 5000,
     {json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(180000)])});
   signal.throwIfAborted();
   const result = validatePaperAnalysis(safeJsonFromModel(raw),text,peers);
+  applySourceMetadata(node,verifiedModelMetadata(result.bibliography,document.markdown));
   node.summary = result.summary.trim();
   node.summaryLanguage = answerLanguage;
   node.aiSummaryEn = answerLanguage === 'en' ? node.summary : '';
@@ -4896,6 +4937,7 @@ function zoomFromCenter(factor) {
 document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
 function handleWorkspaceAction(action) {
   if (action === 'reset-settings') { void resetUserSettings(); return; }
+  if (action === 'clear-data') { void clearUserResearchData(); return; }
   if (action === 'data-folder') {
     const keys=nodes.map(node=>node.fulltextKey).filter(Boolean);
     void localRequest('project',{projectId:currentProjectId,project:cleanProjectForExport()}).then(()=>localRequest('data-folder',{keys})).then(result => {
@@ -5095,6 +5137,14 @@ async function resetUserSettings() {
     location.reload();
   }catch(error){blocker.remove();changingSettings=false;toast(localizedError(error,language));}
 }
+async function clearUserResearchData(){
+ if(!desktop)return toast(panelText('请在桌面安装版中清除数据。','Clear data in the desktop app.'));
+ if(settingsHaveActiveWork())return toast(panelText('请先暂停导入、分析和问答，再清除数据。','Pause imports, analyses and answers before clearing data.'));
+ changingSettings=true;
+ try{await historyWrite;const result=await desktop.clearData(workspaceSnapshot());if(result.cleared)location.reload();}
+ catch(error){toast(localizedError(error,language));}finally{changingSettings=false;}
+}
+
 document.querySelector('#delete-api-config').addEventListener('click',async()=>{
   if(settingsHaveActiveWork())return toast(panelText('请先暂停或等待当前任务完成，再删除配置。','Pause or finish active tasks before deleting the configuration.'));
   changingSettings=true;
@@ -5165,7 +5215,7 @@ document.querySelector('#copy-agent-instructions').addEventListener('click', asy
 });
 for (const [id, action] of [['connect-agent-runtime', 'connect'], ['choose-agent-runtime', 'choose']]) {
   document.querySelector(`#${id}`).addEventListener('click', async () => {
-    const errorHost = document.querySelector('#api-error');
+    const errorHost = document.querySelector('#agent-error');
     if (!desktop?.agentRuntime) { errorHost.textContent = panelText('按需调用需要使用 LitGraph 桌面版。', 'On-demand execution requires the LitGraph desktop app.'); errorHost.hidden = false; return; }
     if (settingsHaveActiveWork()) return toast(panelText('请先完成或暂停当前 AI 任务。', 'Finish or pause current AI tasks first.'));
     const controls = ['#connect-agent-runtime', '#choose-agent-runtime', '#agent-runtime-provider', '#test-api-button', '#disconnect-agent', '#copy-agent-instructions'].map(selector => document.querySelector(selector));
@@ -5181,7 +5231,7 @@ for (const [id, action] of [['connect-agent-runtime', 'connect'], ['choose-agent
       errorHost.hidden = false;
     } finally {
       controls.forEach(control => control.disabled = false);
-      connect.textContent = panelText('连结并验证', 'Connect & verify');
+      connect.textContent = panelText('测试并保存', 'Test & save');
     }
   });
 }
@@ -5301,6 +5351,7 @@ updateModelBadge();
 updateModeButtons();
 saveCurrentProject();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveCurrentProject(); });
+void repairProjectSourceMetadata();
 window.addEventListener('beforeunload', saveCurrentProject);
 if(desktop?.institution){
   desktop.onInstitutionDownload?.(()=>void receiveInstitutionDownloads());

@@ -6,7 +6,7 @@ export function needsModelQueryPlan(question,nodes=[],history=[]){
   || nodes.some(n=>n.title?.length>12&&question.includes(n.title));
 }
 export function retrievalPolicy(plan,paperCount,mode='quick'){
- return mode==='quick'&&plan.strategy==='local-fast'?{budget:paperCount===1?8000:12000,topK:paperCount===1?6:10}:{budget:mode==='expert'?42000:28000,topK:20};
+ return mode==='quick'?{budget:paperCount===1?8000:12000,topK:paperCount===1?6:12,retrievalTimeoutMs:paperCount===1?1200:3500}:{budget:42000,topK:20,retrievalTimeoutMs:12000};
 }
 // Quick mode uses local vocabulary expansion, not a second model round trip.
 export function quickQueryPlan(question,history=[]) {
@@ -27,6 +27,7 @@ export function quickQueryPlan(question,history=[]) {
   [/限制|局限|limitation/i,'limitations generalizability'],
   [/比较|区别|异同|compar|differ/i,'comparison differences similarities'],
   [/观察|观众|observation|audience/i,'social observation audience being watched'],
+  [/留学|签证|visa|international student/i,'international students visa immigration regulations requirements policy'],
   [/强迫|ocd|obsessive/i,'obsessive compulsive disorder OCD']
  ];
  const previous=/^(?:这|它|那|他们|其|(?:this|that|it|they)\b)/i.test(question)?history.filter(x=>x.role==='user').at(-1)?.text||'':'';

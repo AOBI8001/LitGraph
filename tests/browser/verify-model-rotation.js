@@ -15,7 +15,7 @@ async page => {
       await page.evaluate(()=>window.__modelQA.graph.cooldownTicks(0));await page.waitForTimeout(180);
       const state=()=>page.evaluate(()=>{const q=window.__modelQA,g=q.graph,root=g.scene().children.find(c=>typeof c.graphData==='function'),center=q.rotation.pivot.clone();for(const axis of ['x','y','z']){const values=q.initialFramingPoints(g.graphData().nodes).map(n=>n[axis]);center[axis]=(Math.min(...values)+Math.max(...values))/2;}return {eye:g.camera().position.toArray(),cameraQ:g.camera().quaternion.toArray(),target:g.controls().target.toArray(),q:root.quaternion.toArray(),pivot:root.localToWorld(center).toArray(),guide:q.guides?.quaternion.toArray()};});
       const before=await state();const b=await page.locator('#graph-3d').boundingBox();
-      await page.mouse.move(b.x+45,b.y+75);await page.mouse.down();await page.mouse.move(b.x+145,b.y+120,{steps:16});await page.mouse.up();await page.waitForTimeout(150);
+      await page.keyboard.down('Shift');await page.mouse.move(b.x+45,b.y+75);await page.mouse.down();await page.mouse.move(b.x+145,b.y+120,{steps:16});await page.mouse.up();await page.keyboard.up('Shift');await page.waitForTimeout(150);
       const after=await state();const distance=(a,b)=>Math.hypot(...a.map((v,i)=>v-b[i]));
       assert(distance(before.eye,after.eye)<1e-6,'Camera position changed');assert(distance(before.cameraQ,after.cameraQ)<1e-6,'Camera direction changed');
       assert(distance(before.target,after.target)<1e-6,'Camera target changed');assert(distance(before.q,after.q)>.01,'Model did not rotate '+view+basis);

@@ -28,3 +28,5 @@ assert.equal(bounded.documents.length,1);
 assert.equal(bounded.scope.paperCount,2);
 assert.equal(bounded.evidence[0].contentHash,undefined);
 assert.ok(!JSON.stringify(bounded).includes('UNRELATED'));
+const miss=JSON.parse(researchMessages(Array.from({length:280},(_,i)=>({id:String(i),title:'Paper',abstract:'A'.repeat(2000)})),[],'Q',{})[1].content);
+assert.equal(miss.documents.length,12);assert.equal(miss.scope.paperCount,280);assert.equal(miss.scope.documentMetadataTruncated,true);

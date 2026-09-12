@@ -63,14 +63,14 @@ try {
   // depend on navigator.clipboard after its asynchronous instruction request.
   await page.evaluate(() => { window.originalClipboardWriter = navigator.clipboard.writeText; navigator.clipboard.writeText = async () => { throw new DOMException('Document is not focused.', 'NotAllowedError'); }; });
   await page.locator('#empty-model-access').click();
-  assert.equal(await page.locator('.connection-method-title').textContent(),'方式1：API');
+  assert.match(await page.locator('.connection-method-title').textContent(),/^方式1：API\s*推荐$/);
   assert.ok((await page.locator('#external-agent-label').textContent()).startsWith('方式2：外部 Agent'));
   assert.equal(await page.evaluate(()=>Boolean(document.querySelector('.connection-method-title').compareDocumentPosition(document.querySelector('#external-agent-label')) & Node.DOCUMENT_POSITION_FOLLOWING)),true);
   await page.screenshot({path:'output/desktop/model-connection-1.2.0.png'});
   await page.locator('[data-close-modal="api"]').first().click();
   await page.locator('#language-button').click();
   await page.locator('#empty-model-access').click();
-  assert.equal(await page.locator('.connection-method-title').textContent(),'Method 1: API');
+  assert.match(await page.locator('.connection-method-title').textContent(),/^Method 1: API\s*Recommended$/);
   assert.ok((await page.locator('#external-agent-label').textContent()).startsWith('Method 2: External agent'));
   assert.equal(await page.locator('#window-maximize').getAttribute('aria-label'),'Restore window');
   await page.screenshot({path:'output/desktop/model-connection-en-1.2.0.png'});
@@ -156,7 +156,7 @@ try {
   const response = await fetch('/__litgraph/document', { method: 'POST', headers: { Authorization: 'Bearer ' + boot.browserToken, 'Content-Type': 'application/json' }, body: JSON.stringify({ projectId: 'desktop-fixture', nodeId: 'original', fileName: 'fixture.md', markdown: '# Fixture\n\nEvidence is stored locally.', sourceKind: 'pdf_text', originalData }) });
   return response.json();
  }, originalData);
- assert.ok(documentRecord.key && documentRecord.originalRelativePath && documentRecord.markdownRelativePath);
+ assert.ok(documentRecord.key && documentRecord.originalRelativePath && documentRecord.markdownRelativePath,JSON.stringify(documentRecord));
  assert.equal((await readFile(path.join(dataDir, documentRecord.originalRelativePath))).toString('base64'), originalData);
  // Original documents are handed to the OS, never to an in-app viewer.
  await application.evaluate(({shell})=>{globalThis.savedOpenPath=shell.openPath;shell.openPath=async file=>{globalThis.openedOriginal=file;return '';};});

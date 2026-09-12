@@ -27,10 +27,11 @@ export async function modelFetch(url, options) {
   options.signal?.throwIfAborted();
   const id = crypto.randomUUID();
   const cancel = () => { void desktop.cancelModel(id); };
+  const unsubscribe=options.onChunk?desktop.onModelChunk?.(data=>{if(data.id===id&&!options.signal?.aborted)options.onChunk(data.text);}):null;
   options.signal?.addEventListener('abort', cancel, { once: true });
   try {
-    const result = await desktop.modelRequest({ id, url, headers: options.headers, body: options.body });
+    const result = await desktop.modelRequest({ id, url, headers: options.headers, body: options.body,stream:Boolean(options.onChunk) });
     options.signal?.throwIfAborted();
     return new Response(result.body, { status: result.status, headers: { 'Content-Type': result.contentType } });
-  } finally { options.signal?.removeEventListener('abort', cancel); }
+  } finally { unsubscribe?.();options.signal?.removeEventListener('abort', cancel); }
 }

@@ -3,13 +3,14 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFileSync, writeFileSync, mkdirSync, renameSync, existsSync, copyFileSync, readdirSync, unlinkSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, lstat, realpath } from 'node:fs/promises';
 import { localService } from '../scripts/local-service.js';
 import { createMetrics } from './metrics.mjs';
 import { execFile } from 'node:child_process';
 import { institutionBrowser } from './institution.mjs';
 import { scansciService } from '../scripts/scansci-service.js';
 import { withoutPreferences } from '../src/settings-reset.js';
+import { withoutResearchData } from '../src/research-scope.js';
 import { createAgentRuntime } from './agent-runtime.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -36,7 +37,7 @@ async function startDesktop() {
   const adapter = path.join(agentDocs, 'litgraph-mcp.mjs');
   copyFileSync(path.join(root, 'scripts/litgraph-mcp.mjs'), adapter);
   const atomicWrite = (file, data) => { writeFileSync(file + '.tmp', data, { mode: 0o600 }); renameSync(file + '.tmp', file); };
-  let window, origin = '', savedState = {}, pending = new Map();
+  let window, origin = '', savedState = {}, pending = new Map(),suppressStateSaves=false;
   const connectionFile=path.join(agentDocs,'connection.json');
   const pairingFile=path.join(agentDocs,'pairing.json');
   let pairingEnabled=false;
@@ -69,12 +70,13 @@ async function startDesktop() {
   };
   ipcMain.on('desktop:bootstrap', event => {
     if (!trusted(event)) { event.returnValue = null; return; }
+    suppressStateSaves=false;
     let config = null;
     try { if (existsSync(keyPath) && safeStorage.isEncryptionAvailable()) config = JSON.parse(safeStorage.decryptString(readFileSync(keyPath))); } catch {}
     event.returnValue = { state: savedState, config, metricsEnabled: metrics.enabled(), version: app.getVersion() };
   });
   ipcMain.on('desktop:save-state', (event, state) => {
-    try { guard(event); persistState(state); event.returnValue = true; } catch { event.returnValue = false; }
+    try { guard(event);if(!suppressStateSaves)persistState(state); event.returnValue = true; } catch { event.returnValue = false; }
   });
   ipcMain.handle('desktop:save-config', (event, config) => {
     guard(event);
@@ -148,8 +150,10 @@ async function startDesktop() {
     const controller = new AbortController(); pending.set(request.id, controller);
     try {
       const result = await fetch(url, { method: 'POST', headers, body: request.body, redirect: 'error', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(300000)]) });
-      let length = 0, chunks = [];
-      for await (const chunk of result.body || []) { length += chunk.length; if (length > 10 * 1024 * 1024) throw Error('Model response exceeds 10 MB'); chunks.push(chunk); }
+      let length = 0, chunks = [];const decoder=new TextDecoder();
+      const streaming=request.stream===true&&result.ok&&result.headers.get('content-type')?.includes('text/event-stream');
+      for await (const chunk of result.body || []) { length += chunk.length; if (length > 10 * 1024 * 1024) throw Error('Model response exceeds 10 MB'); chunks.push(chunk);if(streaming&&!event.sender.isDestroyed())event.sender.send('desktop:model-chunk',{id:request.id,text:decoder.decode(chunk,{stream:true})}); }
+      if(streaming&&!event.sender.isDestroyed())event.sender.send('desktop:model-chunk',{id:request.id,text:decoder.decode()});
       return { status: result.status, body: Buffer.concat(chunks).toString('utf8'), contentType: result.headers.get('content-type') || 'application/json' };
     } finally { pending.delete(request.id); }
   });
@@ -170,6 +174,17 @@ async function startDesktop() {
     onAgentRevoke:()=>{pairingEnabled=false;atomicWrite(pairingFile,JSON.stringify({enabled:false}));publishConnection();}
   });
   const mime = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.json': 'application/json' };
+  ipcMain.handle('desktop:clear-data',async(event,state)=>{
+    guard(event);if(pending.size||agentRunner.status().processing||agentRunner.status().queued)throw Error('请先暂停正在执行的问答。');
+    const answer=await dialog.showMessageBox(window,{type:'warning',title:'清除本地研究数据',message:'清除所有用户项目、PDF、MD、分析、向量索引、问答与导入历史？',detail:'数据文件夹和旧版全文缓存会移至系统回收站。软件自带样例数据、模型文件及模型连接设置保留。源文件夹中的 PDF 不受影响。',buttons:['取消','确认清除数据'],defaultId:0,cancelId:0,noLink:true});
+    if(answer.response!==1)return {cleared:false};
+    const base=await realpath(dataRoot),targets=[];
+    for(const name of ['data','projects']){const target=path.join(base,name);try{const stat=await lstat(target);if(stat.isSymbolicLink()||path.dirname(await realpath(target))!==base)throw Error('Unsafe data folder; refusing to clear.');targets.push(target);}catch(error){if(error.code!=='ENOENT')throw error;}}
+    await service.prepareDataClear();
+    try{for(const target of targets)await shell.trashItem(target);await window.webContents.session.clearStorageData({origin,storages:['indexdb']});
+      persistState(withoutResearchData(state||savedState));suppressStateSaves=true;return {cleared:true};
+    }finally{service.finishDataClear();}
+  });
   const server = http.createServer((req, res) => {
     const next = async () => {
       try {

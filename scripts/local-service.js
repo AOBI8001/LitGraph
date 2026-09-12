@@ -99,6 +99,7 @@ function institutionFilterReason(paper,filters){
 export function localService(root, dependencies = {}) {
   const dataRoot = dependencies.dataRoot || root;
   const embed=dependencies.embed || createVectorService(root,dataRoot);
+  if(!dependencies.embed)embed.start?.();
   const scholarly=dependencies.scholarly||scholarlyService();
   const engine=dependencies.engine || scansciService(root,{scholarly,download:dependencies.download});
   const acquiringDocuments = new Set();
@@ -121,7 +122,12 @@ export function localService(root, dependencies = {}) {
     await mkdir(path.dirname(file), { recursive: true });
     const temporary = file + '.' + randomUUID() + '.tmp';
     await writeFile(temporary, content, 'utf8');
-    await rename(temporary, file);
+    // Windows may briefly hold a source record open while the background
+    // indexer/antivirus reads it. Keep the old file intact and retry replacement.
+    for(let attempt=0;;attempt++)try{await rename(temporary,file);break;}catch(error){
+      if(!['EPERM','EACCES','EBUSY'].includes(error.code)||attempt>=5)throw error;
+      await new Promise(resolve=>setTimeout(resolve,25*(attempt+1)));
+    }
   }
   async function readSample() {
     try { return JSON.parse(await readFile(samplePath, 'utf8')); }
@@ -135,7 +141,7 @@ export function localService(root, dependencies = {}) {
           if (error.code === 'ENOENT') return null;
           throw error;
         }));
-        if (bundled) return saveDocument({ ...bundled, key: digest(`sample-md:${bundled.corpusHash}`) });
+        if (bundled) return saveDocument({ ...bundled, nodeId:node.id, paperMetadata:{title:node.title,authors:node.authors,year:node.year,doi:node.doi}, key: digest(`sample-md:${bundled.corpusHash}`) });
       }
       return null;
     }
@@ -157,6 +163,7 @@ export function localService(root, dependencies = {}) {
     await atomicWrite(path.join(folders.chunks,record.key+'.json'),JSON.stringify({version:CHUNK_VERSION,key:record.key,chunks}));
     record.chunkCount=chunks.length;record.chunkVersion=CHUNK_VERSION;
     await atomicWrite(path.join(folders.records, record.key + '.json'), JSON.stringify(record));
+    if(record.markdown)void embed.index?.('enqueue',{documents:[{key:record.key,node:{...record.paperMetadata,id:record.nodeId||record.key}}],changed:true}).catch(()=>{});
     return record;
   }
   const documentKey=data=>digest(`${data.projectId}:${data.nodeId}`);
@@ -370,11 +377,14 @@ export function localService(root, dependencies = {}) {
     }
     throw new Error('未知工具');
   }
-  return async (req, res, next) => {
+  let clearing=false,activeMutations=0;
+  const middleware=async (req, res, next) => {
     if (!req.url?.startsWith('/__litgraph/')) return next();
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     const send = (code, obj) => { res.statusCode = code; res.end(JSON.stringify(obj)); };
+    if(clearing)return send(409,{error:'Research data is being cleared; reload the application.'});
+    const mutating=req.method==='POST'&&/^\/__litgraph\/(?:document|project|acquire|discovery-history)(?:\?|$)/.test(req.url);if(mutating)activeMutations++;
     try {
       // Loopback only; never accept ambient cookies or cross-origin browser requests.
       if (!/^(127\.0\.0\.1|localhost):\d+$/.test(req.headers.host || '') || (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) || req.headers['sec-fetch-site'] === 'cross-site') return send(403, { error: '仅允许本机同源访问' });
@@ -404,6 +414,14 @@ export function localService(root, dependencies = {}) {
       c.lastBrowserSeen = Date.now();
       const controller=new AbortController();res.once('close',()=>{if(!res.writableEnded)controller.abort();});
       if(url.pathname==='/__litgraph/embeddings'&&req.method==='POST')return send(200,{vectors:await embed(data.texts,data.kind,controller.signal)});
+      if(url.pathname==='/__litgraph/vector-index'&&req.method==='POST'){
+        if(!embed.index)throw Error('Vector indexing is unavailable');
+        if(!['search','enqueue','status','control'].includes(data.operation))throw Error('Invalid index operation');
+        if(data.operation==='search'&&(!Array.isArray(data.documents)||data.documents.length>5000||!Array.isArray(data.queries)||data.queries.length>8||data.queries.some(q=>typeof q!=='string'||q.length>4000)))throw Error('Invalid index search');
+        if(data.operation==='enqueue'&&(!Array.isArray(data.documents)||data.documents.length>5000))throw Error('Invalid index documents');
+        if(data.operation==='control'&&!['pause','resume','retry'].includes(data.action))throw Error('Invalid index action');
+        return send(200,await embed.index(data.operation,data,controller.signal));
+      }
       if (url.pathname === '/__litgraph/data-folder' && req.method === 'POST') {
         await ensureFolders();
         // Make the current project's legacy originals visible in this folder
@@ -492,7 +510,7 @@ export function localService(root, dependencies = {}) {
         const job = { id, fingerprint, state: 'queued', messages: data.messages, maxTokens: data.maxTokens, context: c.context, created: Date.now(), managed, controller: new AbortController() };
         c.jobs.set(id, job);
         if (managed) {
-          void Promise.resolve().then(() => dependencies.agentRunner.submit(job.messages, job.maxTokens, job.controller.signal, () => { job.state = 'processing'; }, data.researchMode))
+          void Promise.resolve().then(() => dependencies.agentRunner.submit(job.messages, job.maxTokens, job.controller.signal, () => { job.state = 'processing'; }, data.researchMode,partial=>{if(!job.controller.signal.aborted)job.partial=partial;}))
             .then(result => { if (!job.controller.signal.aborted) { job.state = 'done'; job.result = result; } })
             .catch(error => { job.state = job.controller.signal.aborted ? 'cancelled' : 'failed'; job.error = error.message; });
         }
@@ -507,7 +525,7 @@ export function localService(root, dependencies = {}) {
           return send(200, { cancelled: true });
         }
         if (!job) return send(404, { error: '任务已取消或失效' });
-        return send(200, { state: job.state, result: job.result, error: job.error });
+        return send(200, { state: job.state, result: job.result, error: job.error,partial:job.partial });
       }
       if (url.pathname === '/__litgraph/document' && req.method === 'POST') {
         if (data.markdown || data.originalData) {
@@ -516,7 +534,7 @@ export function localService(root, dependencies = {}) {
           let record = { ...previous, key, projectId: data.projectId, nodeId: data.nodeId, markdown: data.markdown ? String(data.markdown) : previous?.markdown, fileName: String(data.fileName || 'source.md'), sourceKind: data.sourceKind || 'markdown',conversionQuality:data.conversionQuality||'text_extraction',pageCount:data.pageCount||null };
           if(data.paperMetadata)record.paperMetadata={title:String(data.paperMetadata.title||'').slice(0,2000),authors:Array.isArray(data.paperMetadata.authors)?data.paperMetadata.authors.filter(x=>typeof x==='string').slice(0,200):[],year:data.paperMetadata.year,doi:String(data.paperMetadata.doi||'').slice(0,500)};
           if(data.replaceOriginal===true && data.originalData){delete record.markdown;delete record.markdownRelativePath;delete record.localMarkdownPath;delete record.metadata;}
-          if(data.originalData)record=await saveOriginal(key,Buffer.from(data.originalData,'base64'),record);
+          if(data.originalData)return send(200,await saveOriginal(key,Buffer.from(data.originalData,'base64'),record));
           return send(200, await saveDocument(record));
         }
         if (data.key && /^[a-f0-9]{64}$/.test(data.key)) {const record=await readDocument(data.key);return send(200,record?.markdown?record:null);}
@@ -536,6 +554,12 @@ export function localService(root, dependencies = {}) {
         return send(200, { data: bytes.toString('base64'), type: 'application/pdf' });
       }
       send(404, { error: '接口不存在' });
-    } catch (error) { send(400, { error: error.message }); }
+    } catch (error) { send(400, { error: error.message }); }finally{if(mutating)activeMutations--;}
   };
+  middleware.prepareDataClear=async()=>{
+    if(activeMutations||acquiringDocuments.size||[...clients.values()].some(c=>[...c.jobs.values()].some(j=>['queued','processing'].includes(j.state))))throw Error('Please finish or cancel active tasks before clearing data.');
+    clearing=true;await Promise.allSettled([...projectWrites.values(),historyWrite,catalogWrite]);await embed.close?.();
+  };
+  middleware.finishDataClear=()=>{foldersReady=null;clearing=false;clients.clear();void catalogReady.then(c=>c.clear());};
+  return middleware;
 }

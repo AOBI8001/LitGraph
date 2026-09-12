@@ -3581,3 +3581,25 @@ html[lang="en"] .discovery-choice { padding-inline: 6px; }
 
 .discovery-channel-report { grid-template-columns: auto minmax(0, 1fr); column-gap: 8px; }
 .discovery-channel-report > small, .discovery-channel-report > details { grid-column: 1 / -1; }
+:root [data-stream-preview] { white-space:normal; }
+
+/* Both connection routes share one form rhythm and aligned primary actions. */
+#api-modal .settings-dialog { width: min(580px, 100%); max-height: calc((100dvh - 80px) / var(--app-scale, 1)); overflow: auto; }
+#api-modal .settings-dialog > header { position: sticky; top: 0; z-index: 2; background: var(--panel); }
+#api-form { display: grid; gap: 16px; padding: 16px 24px 24px; }
+#api-form .api-method-section, #api-form .external-agent-section { display: grid; gap: 8px; min-width: 0; margin: 0; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+#api-form .connection-method-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#api-form h3 { margin: 0; font-size: 13px; line-height: 1.6; font-weight: 600; color: var(--ink); }
+#api-form .connection-recommended { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 5px; background: var(--tool-tint, #f1eaff); color: var(--tool-accent, #7047eb); font-size: 10px; font-weight: 500; line-height: 1.6; }
+#api-form .api-method-section > label, #api-form .external-agent-section > label { font-size: 11px; margin-top: 6px; color: var(--ink); }
+#api-form .api-provider-help, #api-form .external-agent-help { margin: 0; }
+#api-form .agent-runtime-controls { display: flex; margin: 0; }
+#api-form .agent-runtime-controls select { flex: 1; min-width: 0; }
+#api-form footer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin: 8px 0 0; padding: 12px 0 0; border-top: 1px solid var(--line); }
+#api-form footer button { min-height: 36px; padding: 8px 14px; margin: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--ink); font-size: 11px; cursor: pointer; }
+#api-form footer .primary { min-width: 120px; background: var(--tool-accent, #7047eb); border-color: transparent; color: white; }
+#api-form #disconnect-agent { margin-right: auto; font-size: 11px; }
+#api-form button:focus-visible, #api-form input:focus-visible, #api-form select:focus-visible { outline: 2px solid var(--tool-accent); outline-offset: 2px; }
+#api-form .form-error { margin: 0; overflow-wrap: anywhere; }
+.deep-read-history { min-width: 0; }
+.deep-read-history li { overflow-wrap: anywhere; }

@@ -10,9 +10,9 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.2.1 · Windows 10 / 11 x64 · MIT licensed**
+**1.2.4 · Windows 10 / 11 x64 · MIT licensed**
 
-> This page describes the 1.2.1 source. Downloadable installer versions are listed in Releases.
+> Includes background incremental vectors, bounded Quick retrieval, streamed answers, project-scoped conversations, original-sentence previews and source metadata recovery. Version history lives in the [changelog](RELEASE_NOTES.md).
 
 [Download](https://github.com/AOBI8001/LitGraph/releases/latest) · [Website](https://litgraph.aobi.qzz.io/) · [Feedback](https://github.com/AOBI8001/LitGraph/issues)
 
@@ -212,7 +212,7 @@ Hover to inspect a paper label. Click to open its details and emphasize its conn
 
 Multi-select and box selection create a set of papers to investigate. The research entry reflects that selection and carries it into Research space. Leaving either selection mode, or changing views and spatial layouts, clears the current selection.
 
-In the 3D graph, dragging rotates the model around its own center. The timeline uses panning that preserves the orientation of its temporal structure, with limited-angle rotation available separately. Use the wheel to zoom and arrow keys or `WASD` to move the camera; a canvas legend explains the controls. The toolbar also offers node renaming, position locking, fit-to-canvas, and fullscreen browsing.
+In every 3D view, right-drag or left-drag on the background pans the scene in the pointer's direction. Shift + left-drag rotates the model (bounded observation angles in the timeline). Use the wheel to zoom and arrow keys or `WASD` to move the camera; a canvas legend explains the controls. The toolbar also offers node renaming, position locking, fit-to-canvas, and fullscreen browsing.
 
 ### Filters and reading progress
 
@@ -366,7 +366,7 @@ The original question always participates in retrieval. Model-planned requests u
 
 Planning preserves negation, temporal constraints, comparison targets, exact titles and DOIs, with cross-language expressions where useful. It produces retrieval cues rather than answers or guessed findings. Explicit title or DOI matches further restrict the candidate papers; query expansion does not expand the active paper scope.
 
-**Quick mode uses task-adaptive routing.** Short conceptual questions can use local bilingual vocabulary expansion, avoiding a remote planning call. Requests needing precise lookup, comparison or contextual disambiguation, and Expert requests, use model planning. Invalid plans fall back to the original question with a recorded degraded state.
+**Quick mode uses local bilingual expansion without a separate remote planning call.** Expert retains model planning; invalid plans fall back to the original question. Quick dense retrieval has a 1.2-second single-paper or 3.5-second multi-paper budget and falls back to lexical retrieval when unavailable or late. These are dense-retrieval budgets, not end-to-end answer guarantees.
 
 ### 3. Hybrid retrieval and reranking: Exact terminology meets semantic matching
 
@@ -392,8 +392,7 @@ Fused candidates are deduplicated by chunk ID and selected as **complete passage
 | Request path | Maximum chunks | Source-text budget |
 | --- | ---: | ---: |
 | Quick · Local expansion · Single paper | 6 | 8,000 characters |
-| Quick · Local expansion · Multiple papers | 10 | 12,000 characters |
-| Quick · Model planning | 20 | 28,000 characters |
+| Quick · Local expansion · Multiple papers | 12 | 12,000 characters |
 | Expert · Model planning | 20 | 42,000 characters |
 
 Budgets cover evidence text, not the complete request's token count. Required metadata, instructions and bounded conversation history also enter the request. Actual evidence volume depends on passage length, source availability and relevance.
@@ -431,7 +430,7 @@ Caches reuse plans or vectors; evidence is selected for the current question. En
 
 ### 7. Incremental updates, evaluation and scaling boundaries
 
-Saving a new paper as Markdown creates versioned evidence chunks with source positions. Subsequent retrieval encodes only uncached text. Editing a source changes the relevant chunk identities, while unchanged encoding inputs can reuse existing vectors. New requests prepare candidates from the current project scope; retained disk vectors do not bring removed papers back into an answer.
+Saving Markdown automatically queues versioned passage vectors, merges short same-page/same-section fragments and checkpoints progress. Startup backfills older projects and resumes unfinished indexes; no Research-space indexing button is needed. Queries use ready vectors without embedding the collection on demand. Editing a source changes relevant chunk identities; unchanged inputs reuse cached vectors. Requests stay within the active project scope; hidden nodes do not re-enter answers through retained disk vectors.
 
 Evaluation separates **target-evidence recall, factual answer correctness, source locations and refusal boundaries**. The current regression protocol uses 49 distinct papers from the sample project, with 49 single-paper factual questions, 20 cross-paper comparisons, and duplicate-record and unanswerable controls. It supports implementation regression checks; independent-corpus generalization, human review and new questions remain important. See the [research RAG evaluation protocol](docs/RAG_BENCHMARK_V2.md).
 

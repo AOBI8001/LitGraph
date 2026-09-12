@@ -71,7 +71,7 @@ export function mountModelRotation(graph, THREE, host, options) {
   }
   const down = event => {
     lastPointer = { id: event.pointerId, type: event.pointerType };
-    if ((event.button !== 0 && !(timeline() && event.button === 2)) || !options.enabled() || !root() || hitsNode(event)) return;
+    if ((event.button !== 0 && event.button !== 2) || !options.enabled() || !root() || (event.button === 0 && hitsNode(event))) return;
     const s = state();
     if (s.rotation.angleTo(new THREE.Quaternion()) < 1e-8) s.pivot.copy(modelCenter(graph.graphData().nodes, THREE));
     event.preventDefault(); event.stopImmediatePropagation();
@@ -85,7 +85,7 @@ export function mountModelRotation(graph, THREE, host, options) {
     const target = camera.getWorldDirection(new THREE.Vector3())
       .multiplyScalar(position.distanceTo(controls.target)).add(position);
     graph.cameraPosition(position, target, 0);
-    const mode = timeline() ? (event.button === 2 ? 'orbit' : 'pan') : 'model';
+    const mode = event.button === 0 && event.shiftKey ? (timeline() ? 'orbit' : 'model') : 'pan';
     if (timeline() && !s.orbitLimits) s.orbitLimits = new THREE.Spherical().setFromVector3(position.clone().sub(target));
     gesture = { mode, x:event.clientX, y:event.clientY, id:event.pointerId, controlsEnabled:graph.enableNavigationControls(), cameraPosition:position, cameraRotation, cameraTarget:target };
     graph.enableNavigationControls(false);
@@ -131,7 +131,7 @@ export function mountModelRotation(graph, THREE, host, options) {
     host.style.cursor='grab';
     options.onEnd?.();
   };
-  const contextMenu = event => {if(timeline() && options.enabled() && !hitsNode(event))event.preventDefault();};
+  const contextMenu = event => {if(options.enabled())event.preventDefault();};
   graph.controls().enableRotate=false;
   graph.controls().enablePan=false;
   host.addEventListener('pointerdown',down,true);

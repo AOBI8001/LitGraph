@@ -15,6 +15,9 @@ answer must be a nonempty string. suggested_followups must contain exactly three
 export function researchMessages(nodes, history, question, context = {}, mode = 'quick') {
   const policy = researchModePolicy(mode);
   const sourceIds = new Set((context.evidence || []).map(e => e.documentId));
+  // A miss must not turn into a full-library prompt (and minutes of prefill).
+  const relevantNodes = sourceIds.size ? nodes.filter(item=>sourceIds.has(item.id)) : nodes;
+  const suppliedNodes = relevantNodes.slice(0, policy.mode === 'quick' ? 12 : 40);
   return [
     { role: 'system', content: RESEARCH_SYSTEM_PROMPT },
     { role: 'user', content: JSON.stringify({
@@ -23,10 +26,11 @@ export function researchMessages(nodes, history, question, context = {}, mode = 
       response_guidance: policy.instruction,
       evidence_level: context.evidence?.some(e => e.sourceKind !== 'abstract') ? 'retrieved_source_excerpts' : 'abstracts_and_existing_ai_summaries_only',
       evidence: (context.evidence || []).map(({ id, documentId, sourceKind, section, page, lineStart, lineEnd, text }) => ({id,documentId,sourceKind,section,page,lineStart,lineEnd,text})),
-      scope: {paperCount:nodes.length,papersWithRetrievedEvidence:sourceIds.size,exhaustive:false},
+      scope: {paperCount:nodes.length,papersWithRetrievedEvidence:sourceIds.size,exhaustive:false,documentMetadataTruncated:suppliedNodes.length<relevantNodes.length},
+      retrieval_status:{method:context.retrieval?.method,limited:Boolean(context.retrieval?.warning),notice:context.retrieval?.warning||''},
       coverage: (context.coverage || []).filter(entry=>sourceIds.has(entry.id)).map(({ title, ...entry }) => entry),
       // Do not duplicate every abstract and old AI summary after sending source text.
-      documents: (sourceIds.size?nodes.filter(item=>sourceIds.has(item.id)):nodes).map((item, index) => ({ id: item.id || `document-${index + 1}`, title: item.title, authors: item.authors || [], year: item.year, ...(!sourceIds.has(item.id) ? { abstract: (item.abstract || '').slice(0, 2000), ai_summary: (item.aiSummaryZh || item.summary || '').slice(0, 800) } : {}) })),
+      documents: suppliedNodes.map((item, index) => ({ id: item.id || `document-${index + 1}`, title: item.title, authors: item.authors || [], year: item.year, ...(!sourceIds.has(item.id) ? { abstract: (item.abstract || '').slice(0, 2000), ai_summary: (item.aiSummaryZh || item.summary || '').slice(0, 800) } : {}) })),
       recent_conversation: history.filter(item => ['user', 'assistant'].includes(item.role) && (!item.status || item.status === 'done') && !/^无法完成分析：|^Analysis failed:/.test(item.text)).slice(-6).map(item => ({ role: item.role, content: item.text.slice(0, policy.mode === 'quick' ? 2000 : 4000), truncated: item.text.length > (policy.mode === 'quick' ? 2000 : 4000) })),
       research_question: question
     }) }
