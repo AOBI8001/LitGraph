@@ -1,4 +1,6 @@
 import {explicitTargets} from './research-evidence.js';
+import {isCollectionOverview} from './research-overview.js';
+import {researchRoute} from './research-routing.js';
 const cache=new Map();
 // Titles identify the source scope, not the fact to search for inside its text.
 export const questionFocus=question=>String(question).replace(/《[^》]+》/g,' ').replace(/请简短回答[^。]*。?|请简短回答，证据不足请说明。?/g,' ').replace(/针对论文\s*[：:]|比较\s*与\s*[：:]/g,'').replace(/\s+/g,' ').trim()||String(question);
@@ -11,6 +13,8 @@ export function needsModelQueryPlan(question,nodes=[],history=[]){
   || nodes.some(n=>n.title?.length>12&&question.includes(n.title));
 }
 export function retrievalPolicy(plan,paperCount,mode='quick'){
+ if(plan.route==='coverage')return {budget:42000,topK:Math.max(12,paperCount*4),retrievalTimeoutMs:3500};
+ if(plan.intent==='collection-overview')return {budget:42000,topK:Math.min(paperCount,120),retrievalTimeoutMs:3500};
  if(mode!=='quick')return {budget:42000,topK:24,retrievalTimeoutMs:12000,supplement:true};
  if(plan.detailed)return {budget:28000,topK:20,retrievalTimeoutMs:3500,supplement:true};
  return {budget:paperCount===1?8000:12000,topK:paperCount===1?6:12,retrievalTimeoutMs:paperCount===1?1200:3500};
@@ -30,6 +34,8 @@ export function quickQueryPlan(question,history=[]) {
   [/错误|error/i,'errors error related negativity ERN'],
   [/工作记忆|working.memory/i,'working memory capacity'],
   [/方法|实验|任务|method|experiment|task/i,'methods experimental design procedure task'],
+  [/问卷|量表|调查|questionnaire|survey/i,'questionnaire survey scale self-report assessment'],
+  [/访谈|interview/i,'interview qualitative semi-structured interviews'],
   [/结果|结论|发现|result|finding|conclusion/i,'results findings effect discussion'],
   [/限制|局限|limitation/i,'limitations generalizability'],
   [/比较|区别|异同|compar|differ/i,'comparison differences similarities'],
@@ -55,6 +61,8 @@ export function scopedQueryPlanMessages(question,history=[],nodes=[]){
 
 export async function adaptiveQueryPlan(question,{generate,history=[],nodes=[],signal,identity='',mode='quick',timeoutMs=16000}={}){
  signal?.throwIfAborted();
+ const route=researchRoute(question,nodes);
+ if(route.route==='coverage')return {...quickQueryPlan(question),...route,intent:route.task==='overview'?'collection-overview':'scope-coverage',strategy:'local-coverage',detailed:false};
  const detailed=mode==='expert'||needsModelQueryPlan(question,nodes,history),local={...quickQueryPlan(question,history),detailed};
  if(!detailed||!generate)return local;
  const messages=scopedQueryPlanMessages(question,history,nodes),key=JSON.stringify([QUERY_PLAN_VERSION,identity,messages]);

@@ -1,6 +1,6 @@
 {
   "name": "litgraph",
-  "version": "1.2.6",
+  "version": "1.2.8",
   "description": "Local-first literature visualization and evidence-grounded research workspace",
   "author": "LitGraph contributors",
   "main": "desktop/main.mjs",

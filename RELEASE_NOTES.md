@@ -1,3 +1,39 @@
+# LitGraph 1.2.8
+
+2026-09-13 · Windows 10 / 11 x64 · `LitGraph-Setup-1.2.8-x64.exe`
+
+- **两类研究问答**：普通事实问题继续使用混合相关检索；集合概括、逐篇比较与文献筛选使用范围覆盖。路由使用本地规则，不为分类单独调用模型，支持明确指定的论文范围。
+- **带出处的论文卡片**：保存研究问题、对象、方法与发现的原文摘录。导入分析复用同一次模型请求提供引句并做字面匹配；旧论文读取时自动建立本地候选摘录卡片，不填造缺失内容，也不重新计费分析。卡片按原文指纹失效更新。
+- **逐篇检索与分批汇总**：比较/筛选在每篇内部检索；大范围概括和比较分批判断、必要时分层汇总，不再在 120 篇截断。记录逐篇结果与不确定性，显示范围处理进度；同一问题暂停后重试复用已完成批次，应用重启后需重新请求。
+- **更诚实的证据说明**：展示实际来源覆盖与分析数量；检索未命中不能视为不存在。模型判断基于摘录，不承诺逐字阅读全文或穷尽找齐所有匹配项。修复原文可用性与向量索引状态混淆，保留原文预览、页码行号和跨轮证据隔离。
+- 新增卡片、路由、29 篇分批、150 篇分层、失败/取消/重试及真实样例与桌面回归检查。包含此前本地 1.2.7 的概览修复。具体限制与验证方式见 [覆盖说明](docs/RESEARCH_COVERAGE_1.2.8.md)。
+
+本版未重新测量真实模型召回率、准确率或 API 耗时；历史 1.2.6 指标不代表本版新增流程。大范围核查会增加模型调用次数与费用，可先选中较小范围试用。临时附件不纳入集合逐篇核查，回答会明确提示。安装包不含开发者个人项目、密钥和问答历史；升级保留本机数据。安装包未签名，请核对 `SHA256SUMS.txt`，保留系统安全防护。
+
+## English
+
+- Separate relevance retrieval from scoped coverage with local task routing. Preserve ordinary fact-query retrieval; use per-paper source cards for overviews and per-paper retrieval for comparison/screening.
+- Reuse the import analysis call for source-matched card quotations. Upgrade old sources with locally selected, versioned source excerpts without extra model calls. Missing information remains unknown.
+- Add bounded batches, hierarchical synthesis, globally scoped evidence IDs, review ledgers, progress and in-request retry reuse. No 120-paper cutoff in the application collection workflow; coverage is not exhaustive full-text reading or proof of absence.
+- Include the local 1.2.7 overview fix and new regression checks. No new live-model accuracy or API-latency claims. Large scopes cost more calls; temporary attachments are explicitly excluded from library scope reviews.
+
+---
+
+# LitGraph 1.2.7
+
+2026-09-13 · 本地修复版，尚未发布 GitHub
+
+- **全库概览覆盖**：识别“这些文献主要研究什么”等概括问题，逐篇选取摘要、研究目的或正文开头的原文证据，不再沿用普通事实问题的全库 Top-K。50 篇样例均有 MD，此次修复不填造或改写原文。
+- **准确说明证据范围**：区分原文可用、只有摘要、无来源文本和上下文预算遗漏；概览带上全部已覆盖论文的元数据，不再只保留快速模式前 12 篇。全文可用不等于本次已阅读全文，也不等于向量索引已完成。
+- 概览摘录总预算为 42,000 字符，最多覆盖 120 篇；更大项目明确提示未覆盖数量，不能声称完成全库穷尽综述。普通事实问答仍使用原有混合检索，不扩大每道问题的延迟。
+- 增加真实 50 篇样例覆盖、通用导入文献、结构化摘要空标题、缺失来源、大库预算及桌面问答回归测试。
+
+## English
+
+- Add source-based, per-paper collection overviews instead of applying global fact-query top-K to library synthesis. Preserve exact excerpt offsets and quotations.
+- Distinguish source availability from retrieval coverage and vector-index readiness. Include metadata for every covered overview paper; report actual missing sources and budget omissions.
+- Bound overview evidence to 42,000 characters and 120 papers, without claiming exhaustive full-text review. Retain the normal fact-query retrieval path.
+
 # LitGraph 1.2.6
 
 2026-09-13 · Windows 10 / 11 x64 · `LitGraph-Setup-1.2.6-x64.exe`

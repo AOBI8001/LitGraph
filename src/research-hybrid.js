@@ -1,7 +1,11 @@
 import {makeCandidates,explicitTargets,lexicalRank,packEvidence,fingerprint} from './research-evidence.js';
+import {isCollectionOverview,overviewEvidence} from './research-overview.js';
+import {coverageEvidence} from './research-coverage.js';
 export const RAG_TOP_K=20;
 export async function hybridEvidence(documents,question,plan,{searchIndex,budget=28000,topK=RAG_TOP_K,signal,retrievalTimeoutMs=3500,supplement=false}={}){
  const started=performance.now();signal?.throwIfAborted();
+ if(plan.intent==='collection-overview'||(!plan.intent&&isCollectionOverview(question,documents.length)))return overviewEvidence(documents,{budget:Math.max(budget,42000),signal,summaryField:plan.summaryField});
+ if(plan.intent==='scope-coverage')return coverageEvidence(documents,question,plan,{signal,budget,retrieve:(docs,q,p,opts)=>hybridEvidence(docs,q,p,{...opts,searchIndex})});
  const targets=explicitTargets(documents,question),all=makeCandidates(documents),candidates=targets.length?all.filter(c=>targets.includes(c.documentId)):all;
  if(!candidates.length)return {evidence:[],retrieval:{method:'empty',targets}};
  const queries=[...new Set([...(plan.queries||[question]),[...(plan.high_level_keywords||[]),...(plan.low_level_keywords||[])].join(' ')].filter(Boolean))],fused=new Map(),bm=new Map(),dense=new Map();

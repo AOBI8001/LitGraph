@@ -1,0 +1,18 @@
+import fs from 'node:fs/promises';
+import {createRequire} from 'node:module';
+import {createHash} from 'node:crypto';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+const require=createRequire(import.meta.url),builder=createRequire(require.resolve('electron-builder')),app=createRequire(builder.resolve('app-builder-lib')),asar=app('@electron/asar');
+const version=JSON.parse(await fs.readFile('package.json','utf8')).version;
+const archive=`release/${version}/win-unpacked/resources/app.asar`;
+const files=asar.listPackage(archive).map(s=>s.replaceAll('\\','/').replace(/^\//,'')),extract=f=>asar.extractFile(archive,path.normalize(f)).toString();
+const forbidden=files.filter(f=>!f.startsWith('node_modules/')&&/^(?:output|data|projects|release|\.codex|\.env)(?:\/|$)|(?:^|\/)(?:workspace-state\.json|model-config\.encrypted|credentials\.json|auth\.json|.*\.local\.json)$/.test(f));
+assert.deepEqual(forbidden,[]);assert.equal(JSON.parse(extract('package.json')).version,version);
+const bundle=files.filter(f=>/^dist\/assets\/.*\.js$/.test(f)).map(extract).join('\n');
+for(const marker of ['collection-overview','scope-coverage','source-card-v1','50-paper sample graph'])assert.ok(bundle.includes(marker),marker);
+const corpus=JSON.parse(extract('dist/sample-fulltext/index.json'));assert.equal(corpus.documents.length,50);
+const installer=`release/${version}/LitGraph-Setup-${version}-x64.exe`,bytes=await fs.readFile(installer),sha256=createHash('sha256').update(bytes).digest('hex');
+const report={version,archiveEntries:files.length,forbidden,samplePapers:corpus.documents.length,size:bytes.length,sha256};
+await fs.mkdir('output',{recursive:true});await fs.writeFile(`output/package-audit-${version}.json`,JSON.stringify(report,null,2));
+await fs.writeFile(`release/${version}/SHA256SUMS.txt`,`${sha256}  LitGraph-Setup-${version}-x64.exe\n`);console.log(JSON.stringify(report));

@@ -1,0 +1,20 @@
+import fs from 'node:fs/promises';
+import assert from 'node:assert/strict';
+import sample from '../../src/public-sample.js';
+import {loadSampleDocument} from '../../src/sample-corpus.js';
+import {makeCandidates} from '../../src/research-evidence.js';
+import {adaptiveQueryPlan,retrievalPolicy} from '../../src/research-query.js';
+import {hybridEvidence} from '../../src/research-hybrid.js';
+import {sourceCoverage} from '../../src/research-overview.js';
+import {researchMessages} from '../../src/research-agent.js';
+const documents=await Promise.all(sample.nodes.map(async node=>({node,document:await loadSampleDocument(node,f=>fs.readFile('public/sample-fulltext/'+f,'utf8'))})));
+const question='这些文献主要研究了一个什么问题';
+const plan=await adaptiveQueryPlan(question,{nodes:sample.nodes,history:[{role:'user',text:'SSRT可靠吗？'}],generate:()=>{throw Error('Overview must not rewrite into the prior topic');}});
+const result=await hybridEvidence(documents,question,plan,retrievalPolicy(plan,50));
+const coverage=sourceCoverage(documents,result.evidence),messages=researchMessages(sample.nodes,[],question,{...result,coverage});
+assert.equal(result.retrieval.coveredPaperCount,50);assert.equal(result.retrieval.missingSourceCount,0);
+assert.equal(JSON.parse(messages[1].content).documents.length,50);
+for(const e of result.evidence){const md=documents.find(d=>d.node.id===e.documentId).document.markdown;assert.equal(md.slice(e.startOffset,e.endOffset),e.text);assert.ok(e.text.length>=180,'Non-substantive excerpt '+e.documentId);}
+const report={question,papers:documents.length,mdPresent:documents.filter(d=>d.document?.markdown).length,characters:documents.reduce((n,d)=>n+d.document.markdown.length,0),chunks:makeCandidates(documents).length,minMdCharacters:Math.min(...documents.map(d=>d.document.markdown.length)),retrieval:result.retrieval,metadataCount:JSON.parse(messages[1].content).documents.length,limitations:'Integrity and coverage test, not verification that every PDF glyph was correctly extracted or that generated answers are factually complete.'};
+await fs.mkdir('output/overview-audit',{recursive:true});await fs.writeFile('output/overview-audit/report.json',JSON.stringify(report,null,2));await fs.writeFile('output/overview-audit/messages.json',JSON.stringify(messages,null,2));
+console.log(JSON.stringify(report));

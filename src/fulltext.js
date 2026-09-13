@@ -3,6 +3,7 @@ import { selectEvidence } from './research-evidence.js';
 import { retrieveInWorker } from './research-worker-client.js';
 import { assessPdfTextQuality, readablePdfPage } from './pdf-text-quality.js';
 import { loadSampleDocument } from './sample-corpus.js';
+import {buildPaperCard,validPaperCard} from './research-card.js';
 let dbPromise;
 const sourceCache = new Map();
 function database() {
@@ -83,6 +84,8 @@ export async function saveOriginalFile(projectId, node, file) {
   }
 }
 export async function saveFulltext(projectId, node, document) {
+  document.paperCard=buildPaperCard(node,document);
+  node.researchCard=document.paperCard;
   const key = `${projectId}:${node.id}`;
   let browserSaved = false;
   try { await storage(key, document); browserSaved = true; node.fulltextStorageKey = key; } catch { /* The local disk remains usable when browser storage is full. */ }
@@ -103,7 +106,7 @@ export async function saveFulltext(projectId, node, document) {
   }
   return document;
 }
-export async function getFulltext(node) {
+async function readFulltext(node) {
   if (node.fulltextStorageKey) { const cached = await storage(node.fulltextStorageKey).catch(() => null); if (cached?.markdown) return cached; }
   const cacheKey = node.fulltextKey || `${node.id}:${node.doi}:${node.title}`;
   if (sourceCache.has(cacheKey)) return sourceCache.get(cacheKey);
@@ -120,6 +123,19 @@ export async function getFulltext(node) {
   if (document) sourceCache.set(cacheKey, document);
   return document;
 }
+export async function getFulltext(node){
+ const document=await readFulltext(node);
+ if(!document?.markdown)return document;
+ if(validPaperCard(node.researchCard,document,node))document.paperCard=node.researchCard;
+ if(!validPaperCard(document.paperCard,document,node)){
+  const key='paper-card:'+ (node.fulltextStorageKey||node.fulltextKey||`${node.id}:${node.doi}:${node.title}`);
+  const saved=await storage(key).catch(()=>null);
+  document.paperCard=validPaperCard(saved,document,node)?saved:buildPaperCard(node,document);
+  if(saved!==document.paperCard)await storage(key,document.paperCard).catch(()=>{});
+ }
+ return document;
+}
+import {sourceCoverage} from './research-overview.js';
 export async function prepareEvidence(nodes, question, attachments = [], signal, budget = 42000, plan = null, options = {}) {
   const {onStage = () => {}, ...retrievalOptions}=options;
   onStage('loading');
@@ -132,7 +148,7 @@ export async function prepareEvidence(nodes, question, attachments = [], signal,
   onStage('retrieving');
   const result = plan ? await retrieveInWorker(documents.map(({node,document})=>({node,document:document?{...document,original:undefined}:null})), question, plan, {signal,budget,...retrievalOptions}) : {evidence:selectEvidence(documents,question,budget)};
   const {evidence}=result;
-  return { ...result, coverage: documents.map(({ node, document }) => ({ id: node.id, title: node.title, status: document ? 'fulltext_indexed_excerpts_only' : node.abstract ? 'abstract_only' : 'no_source_text', suppliedEvidenceIds: evidence.filter(e => e.documentId === node.id).map(e => e.id) })) };
+  return { ...result, coverage: sourceCoverage(documents,evidence) };
 }
 export async function originalBlob(node) {
   if (node.fulltextStorageKey) {

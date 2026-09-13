@@ -27,7 +27,7 @@ async page=>{
     await page.evaluate(storageKey=>new Promise((resolve,reject)=>{const request=indexedDB.open('litgraph-fulltext',1);request.onsuccess=()=>{const tx=request.result.transaction('documents','readwrite');tx.objectStore('documents').delete(storageKey);tx.oncomplete=()=>{request.result.close();resolve()};tx.onerror=()=>reject(tx.error)};}),n.storageKey);
     await page.reload();await page.waitForFunction(()=>window.__discoveryQA);
     const evidence=await page.evaluate(async()=>{const q=window.__discoveryQA,n=q.nodes.find(n=>n.doi==='10.1371/journal.pmed.1003583')||q.nodes[0];const blob=await q.originalBlob(n);const result=await q.prepareEvidence([n],'What does PRISMA recommend?');q.renderInspector(n);return {bytes:blob?.size,coverage:result.coverage,evidence:result.evidence.length};});
-    assert(evidence.bytes>10000&&evidence.evidence>0&&evidence.coverage[0].status==='fulltext_indexed_excerpts_only','Disk recovery or evidence retrieval failed');
+    assert(evidence.bytes>10000&&evidence.evidence>0&&evidence.coverage[0].status==='source_text_available_excerpts_only','Disk recovery or evidence retrieval failed');
     const downloadPromise=page.waitForEvent('download');await page.locator('#open-pdf-button').click();await downloadPromise;
     report.push({protocol,realDownload:true,diskRecovery:true,originalButton:true,...n,evidence});
    }else report.push({protocol,search:true,analysis:true,count:records.length});

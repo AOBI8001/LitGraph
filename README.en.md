@@ -2,6 +2,8 @@
 
 # LitGraph
 
+1.2.8 separates relevance retrieval from scope coverage, adding source-backed paper cards, per-paper comparison/screening and batched collection synthesis. See [release notes](RELEASE_NOTES.md).
+
 _Connect the literature. Follow the evidence._
 
 Reading builds a collection. Research builds an understanding: which papers address the same question, where their findings converge, why they disagree, and what is worth asking next.
@@ -10,7 +12,7 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.2.6 · Windows 10 / 11 x64 · MIT licensed**
+**1.2.8 · Windows 10 / 11 x64 · MIT licensed**
 
 > Fixes sample index preparation and cross-turn evidence IDs. Sources display up to 24 original opening words, with `...` for longer excerpts; originals shorter than ten words are shown fully, never padded. Unknown citations are explicitly marked unverified, never mapped to unrelated sources. Version history lives in the [changelog](RELEASE_NOTES.md).
 
@@ -431,7 +433,9 @@ Caches reuse plans or vectors; evidence is selected for the current question. En
 
 ### 7. Incremental updates, evaluation and scaling boundaries
 
-See the [1.2.6 measured quality/latency report](docs/RAG_BENCHMARK_1.2.6.md): 97.75% reference recall, 100% strict necessary-fact accuracy and 20.60-second median backend completion on the known regression set. These are not all-corpus/all-model guarantees; scope and review limitations are reported explicitly.
+Historical model measurements: [1.2.6 quality/latency report](docs/RAG_BENCHMARK_1.2.6.md), with 97.75% reference recall, 100% strict necessary-fact accuracy and 20.60-second backend median on a known regression set. These do not measure the new 1.2.8 scope-coverage workflow or guarantee accuracy for other corpora/models.
+
+In 1.2.8, scoped overviews use one source-backed aim card per paper. Comparison and screening retrieve inside each paper rather than competing for global top-K. New imports collect card quotations in the existing analysis call; old sources get local extractive cards on access, without another model call. Large scopes use bounded batches and hierarchical synthesis with explicit coverage/uncertainty. A retrieval miss is not absence, and locally selected card excerpts are candidates, not independently verified semantic annotations. See [coverage design and limitations](docs/RESEARCH_COVERAGE_1.2.8.md).
 
 Saving Markdown automatically queues versioned passage vectors, merges short same-page/same-section fragments and checkpoints progress. Startup backfills older projects and resumes unfinished indexes; no Research-space indexing button is needed. Queries use ready vectors without embedding the collection on demand. Editing a source changes relevant chunk identities; unchanged inputs reuse cached vectors. Requests stay within the active project scope; hidden nodes do not re-enter answers through retained disk vectors.
 

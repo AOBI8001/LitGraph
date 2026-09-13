@@ -24,6 +24,8 @@ import { readAIResponse, researchTokenBudget } from './ai-response.js';
 import {createTextStream,partialAnswer} from './ai-stream.js';
 import { normalizeResearchMode, researchModePolicy, researchThinkingOptions, compatibleModelBody } from './research-mode.js';
 import { researchMessages } from './research-agent.js';
+import {prepareCollectionRequest} from './research-collection-flow.js';
+import {buildPaperCard} from './research-card.js';
 import { ResearchRequest, formatResearchDuration } from './research-request.js';
 import {researchChatKey} from './research-scope.js';
 import { externalState, refreshExternal, externalInstructions, externalCompletion, localRequest, copyTextToClipboard } from './external-agent.js';
@@ -2170,6 +2172,8 @@ function ensureResearchTab(node = null) {
 
 function researchRunText(run) {
   const elapsed = formatResearchDuration(run.elapsed(), language);
+  if(run.status==='pending'&&run.stage.startsWith('coverage:')){const [,done,total]=run.stage.split(':');return panelText(`范围核查 ${done} / ${total} 篇 · ${elapsed}`,`Scope review ${done} / ${total} papers · ${elapsed}`);}
+  if(run.status==='pending'&&run.stage.startsWith('aggregating:'))return panelText(`正在汇总各批证据 · ${elapsed}`,`Combining batch evidence · ${elapsed}`);
   if (run.status === 'pending') { const labels={preparing:['准备请求','Preparing'],rewriting:['改写检索问题','Planning retrieval'],loading:['读取原文','Reading sources'],retrieving:['检索原文证据','Retrieving evidence'],generating:['等待模型回答','Waiting for model']}; const pair=labels[run.stage]||labels.preparing; return `${panelText(...pair)} · ${elapsed}`; }
   if (run.status === 'paused') return panelText(`已在 ${elapsed}后停止。`, `Stopped after ${elapsed}.`);
   if (run.status === 'error') return panelText(`无法完成分析：${localizedError(run.error, language)}`, `Analysis failed: ${localizedError(run.error, language)}`);
@@ -2226,7 +2230,7 @@ function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode
   const config = activeAIConfig();
   const mode = normalizeResearchMode(requestedMode);
   const run = new ResearchRequest(async (signal, onStage, onPartial) => {
-    const { messages: requestMessages, evidence } = await buildMessages(signal, config, mode, onStage);
+    const { messages: requestMessages, evidence, coverageNotice, reviewLedger } = await buildMessages(signal, config, mode, onStage);
     onStage('generating');
     let answer;
     try { answer = await callAI(requestMessages, config, researchTokenBudget(config, mode), { signal, json: true, researchMode: mode,onText:raw=>onPartial(partialAnswer(raw)) }); }
@@ -2238,7 +2242,8 @@ function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode
     if (!parsed || typeof parsed.answer !== 'string' || !parsed.answer.trim() || !Array.isArray(parsed.suggested_followups)) throw new Error(panelText('模型已返回内容，但未按要求提供 JSON 回答和三个后续问题；请重试', 'The model replied, but did not provide the required JSON answer and three follow-up questions. Retry.'));
     const followups = [...new Set(parsed.suggested_followups.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean))];
     if (followups.length !== 3 || followups.some(item => item.length > 160)) throw new Error(panelText('模型返回的后续问题格式不正确，请重试', 'Invalid follow-up question format. Retry.'));
-    return { ...groundedEvidenceAnswer(parsed.answer,evidence,language), suggested_followups: followups };
+    const grounded=groundedEvidenceAnswer(parsed.answer,evidence,language);
+    return { ...grounded,answer:coverageNotice?`${grounded.answer}\n\n> ${coverageNotice}`:grounded.answer,reviewLedger, suggested_followups: followups };
   }, (state, event) => {
     if (researchRequests.get(chatKey) !== state) return;
     const windowMatches = deepReadWindow?.isConnected && deepReadWindow.dataset.chatKey === chatKey;
@@ -2260,6 +2265,7 @@ function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode
       message.responseMode = mode;
       message.suggested_followups = state.status === 'done' ? state.result.suggested_followups : [];
       message.sources = state.status === 'done' ? state.result.sources : [];
+      message.reviewLedger = state.status === 'done' ? state.result.reviewLedger : undefined;
       localStorage.setItem(chatKey, JSON.stringify(messages));
     }
     if (windowMatches) {
@@ -2291,11 +2297,19 @@ function submitResearchQuestion(element, tab, chatKey) {
   const attachments = [...(researchAttachments.get(chatKey) || [])];
   if (attachments.some(a => a.image) && activeAIConfig().vision !== true) return showResearchNotice(panelText('当前模型未启用图片输入。请移除图片，或在模型接入中确认该模型支持图片后再发送。', 'Image input is not enabled. Remove the image, or confirm this model supports images in Model connection before sending.'));
   const requestedMode = normalizeResearchMode(element.querySelector('#research-response-mode').value);
+  const collectionCache=new Map();
   recordUse('question');
   const buildMessages = async (signal, config, mode, onStage) => {
     onStage(mode === 'expert' || needsModelQueryPlan(question,scopedNodes,priorMessages) ? 'rewriting' : 'preparing');
     const plan = await adaptiveQueryPlan(question,{mode,history:priorMessages,nodes:scopedNodes,signal,identity:JSON.stringify([config.provider,config.model,config.endpoint]),generate:(messages,planSignal)=>callAI(messages,config,700,{json:true,researchMode:'quick',signal:planSignal})});
     const policy=retrievalPolicy(plan,scopedNodes.length,mode);
+    if(plan.route==='coverage'){
+      const request=await prepareCollectionRequest({nodes:scopedNodes,question,history:priorMessages,plan,mode,signal,language,onStage,cache:collectionCache,
+        prepare:(batch,batchPlan)=>prepareEvidence(batch,question,[],signal,42000,batchPlan,{topK:policy.topK,onStage:stage=>onStage(stage)}),
+        generate:(messages,tokens)=>callAI(messages,config,tokens,{signal:AbortSignal.any([signal,AbortSignal.timeout(120000)]),json:true,researchMode:'quick'})});
+      if(attachments.length){request.messages[0].content+=' This collection review uses the selected library papers only; newly attached materials were not part of its per-paper review. State that exclusion when relevant.';request.coverageNotice+=' '+panelText('本次范围核查仅处理项目论文，未纳入临时附件。','Temporary attachments were not included in this scoped library review.');}
+      return request;
+    }
     const context = await prepareEvidence(scopedNodes, question, attachments, signal, policy.budget,plan,{topK:policy.topK,retrievalTimeoutMs:policy.retrievalTimeoutMs,supplement:policy.supplement,onStage});
     const notice=retrievalNotice(context.retrieval,plan,language);if(notice)toast(notice);
     const textMessages = researchMessages(scopedNodes, priorMessages, question, context, mode);
@@ -4289,12 +4303,15 @@ async function analyzeOriginal(node, signal) {
   }
   const answerLanguage = language;
   const analysisMessages=paperAnalysisMessages(node,text,peers,project.theories,answerLanguage);
+  analysisMessages[0].content+=' Also return paperCard with researchQuestion, population, methods and findings fields. Each field is {"quote":"one exact contiguous substantive passage from original_excerpts"}; use null when not explicit. Keep each quote under 900 characters. Do not translate, infer or invent missing fields. These are source-backed cards, not additional prose summaries.';
   analysisMessages[0].content+=' Also return an optional bibliography object: {"title":{"value":"original title","quote":"exact title passage"},"authors":[{"name":"paper author, not supervisor","quote":"exact byline passage"}],"year":{"value":2024,"quote":"exact publication or thesis date passage"}}. Use only supplied frontmatter, not reference entries or grants/received dates. Omit uncertain fields. Do not infer citation counts. Quotes must be literal source passages.';
   const analysisInput=JSON.parse(analysisMessages[1].content);analysisInput.frontmatter=metadataFrontmatter(document.markdown);analysisMessages[1].content=JSON.stringify(analysisInput);
   const raw = await callAI(analysisMessages, activeAIConfig(), 5000,
     {json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(180000)])});
   signal.throwIfAborted();
   const result = validatePaperAnalysis(safeJsonFromModel(raw),text,peers);
+  node.researchCard=buildPaperCard(node,document,result.paperCard);
+  document.paperCard=node.researchCard;
   applySourceMetadata(node,verifiedModelMetadata(result.bibliography,document.markdown));
   node.summary = result.summary.trim();
   node.summaryLanguage = answerLanguage;
