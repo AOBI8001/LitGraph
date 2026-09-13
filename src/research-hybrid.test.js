@@ -35,7 +35,7 @@ test('quick searches only ready vectors, never generates passage vectors, and ca
 test('detailed, numerical and comparison questions retain model rewriting and full evidence budget',()=>{
  for(const q of ['比较两篇论文的发现','患者人数是多少','针对论文《A detailed study》：方法有哪些？'])assert.equal(needsModelQueryPlan(q),true);
  assert.equal(needsModelQueryPlan('SSRT测量抑制控制可靠吗'),false);
- assert.equal(retrievalPolicy({queries:['question']},50,'expert').topK,20);
+ assert.equal(retrievalPolicy({queries:['question']},50,'expert').topK,24);
  assert.equal(retrievalPolicy({queries:['question']},50,'quick').topK,12);
  assert.equal(retrievalPolicy(quickQueryPlan('可靠?'),1).budget,8000);
 });

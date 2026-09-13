@@ -1,3 +1,31 @@
+# LitGraph 1.2.6
+
+2026-09-13 · Windows 10 / 11 x64 · `LitGraph-Setup-1.2.6-x64.exe`
+
+## 中文
+
+- **按问题分配检索投入**：简单概念问题保持本地词汇扩展；样本量、精确事实、明确论文及比较问题恢复精简的多查询规划。规划只携带明确提及的论文元数据和有限用户追问，不发送整库标题与旧回答；有效规划可复用，最多等待 16 秒，失败仍使用较大的事实题证据预算。
+- **减少比较题与细节遗漏**：快速事实题采用 20 段 / 28,000 字符基础预算，专家为 24 段 / 42,000 字符。明确指定的比较对象均分基础证据名额，并增加一轮本地补检，查找问题维度及匹配的摘要、正文开头；最多补 6 段 / 8,400 字符，总字符上限 48,000。补检不额外请求模型，不现场重建段落向量。
+- **保留响应与可追溯性**：继续使用后台增量索引、已就绪向量检索、限时关键词降级和流式回答。证据编号在最终证据包确定后统一分配；原文摘录、页码行号、项目隔离及未知引用提示保持不变。
+- 补充取消、规划超时、来源范围、双论文证据覆盖和桌面问答回归测试，并更新检索架构说明。
+
+固定回归集实测：参考证据召回 87/89（97.75%），严格答案准确率 69/69（100%），完整回答后端中位数 20.60 秒（1.2.5 为 12.11 秒）。这是已知样例回归集、当前 Codex CLI 的结果，尚无独立人工复核，不代表任意问题或其他模型的保证；方法与局限见 [1.2.6 评测报告](https://github.com/AOBI8001/LitGraph/blob/v1.2.6/docs/RAG_BENCHMARK_1.2.6.md)。
+
+更大的证据范围和额外规划会增加复杂问题的耗时。补检是检索启发式，不是事实核验或穷尽检索；准确率取决于语料、原文质量、模型和问题。升级保留本机数据与配置；安装包只携带内置样例，不含开发者个人项目、密钥和问答历史。安装包未签名，请核对 `SHA256SUMS.txt`，并保留系统安全防护。
+
+## English
+
+- Route simple concepts through local expansion and precise facts/comparisons through compact, cached multi-query planning. Send only explicitly mentioned paper metadata and bounded user follow-ups. Planning has a 16-second deadline; fallback retains the larger fact-query evidence budget.
+- Use base budgets of 20 chunks / 28,000 characters for quick facts and 24 / 42,000 for expert requests. Balance explicitly named comparison targets, then perform one local query-aspect and abstract/lead-paragraph coverage pass: at most 6 extra chunks / 8,400 characters, capped at 48,000 total. No extra model call or on-demand passage indexing in this pass.
+- Retain background incremental indexes, ready-vector lookup, bounded lexical fallback, streamed answers, source quotations/locations, project isolation and visible unverified-citation warnings. Assign evidence IDs only after assembling the final context.
+- Add cancellation, planning-deadline, scope, comparison-coverage and desktop regressions; update architecture documentation.
+
+Known-suite measurement: 87/89 reference recall (97.75%), 69/69 strict necessary-fact accuracy (100%), 20.60-second median backend completion (1.2.5: 12.11 seconds). This is the current Codex CLI on a known sample regression set, without independent human review—not a guarantee for unseen questions or other models. See the [evaluation report](https://github.com/AOBI8001/LitGraph/blob/v1.2.6/docs/RAG_BENCHMARK_1.2.6.md).
+
+Complex questions intentionally trade additional latency for evidence coverage. Coverage heuristics are neither factual verification nor exhaustive retrieval. Upgrades retain local data/settings; installers exclude developer projects, credentials and conversations. The installer is unsigned; verify `SHA256SUMS.txt` and keep system protections enabled.
+
+---
+
 # LitGraph 1.2.5
 
 2026-09-12 · Windows 10 / 11 x64 · `LitGraph-Setup-1.2.5-x64.exe`

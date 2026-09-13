@@ -1,0 +1,22 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+const out=path.resolve(process.argv[2]);
+const read=name=>fs.readFile(path.join(out,name),'utf8').then(JSON.parse);
+const gold=await read('gold.json'),settings=await read('settings.json');
+const rows=await Promise.all(gold.map(async c=>({...c,...await read(c.id+'.json')})));
+const fingerprint=createHash('sha256').update(JSON.stringify(rows.map(r=>({id:r.id,parsed:r.parsed,error:r.error})))).digest('hex');
+const review=await read('review.json');
+if(review.fingerprint!==fingerprint)throw Error('Review does not match answers');
+for(const r of rows){const grade=review.grades[r.id];if(!grade||![0,.5,1].includes(grade.score))throw Error('Missing review: '+r.id);Object.assign(r,grade);}
+const primary=rows.filter(r=>['single-fact','cross-paper'].includes(r.category));
+const ratio=(n,d)=>({numerator:n,denominator:d,rate:d?n/d:null});
+const score=xs=>({strict:ratio(xs.filter(r=>r.score===1).length,xs.length),weighted:ratio(xs.reduce((n,r)=>n+r.score,0),xs.length)});
+const stat=(xs,key)=>{const v=xs.map(x=>x[key]).filter(Number.isFinite).sort((a,b)=>a-b);return {n:v.length,median:v.length%2?v[(v.length-1)/2]:(v[v.length/2-1]+v[v.length/2])/2,p95:v[Math.ceil(v.length*.95)-1]};};
+const summary={version:settings.version,predictionsFingerprint:fingerprint,primary:score(primary),single:score(primary.filter(r=>r.category==='single-fact')),comparison:score(primary.filter(r=>r.category==='cross-paper')),negative:score(rows.filter(r=>r.category==='unanswerable')),recall:ratio(primary.reduce((n,r)=>n+(r.metrics?.recovered||0),0),89),runtimeSuccess:ratio(rows.filter(r=>!r.error).length,75),format:ratio(rows.filter(r=>r.parsed?.answer&&r.parsed?.suggested_followups?.length===3).length,75),unknownEvidence:rows.filter(r=>r.invalidEvidenceIds?.length).map(r=>({id:r.id,ids:r.invalidEvidenceIds})),retrievalWarnings:rows.filter(r=>r.context?.retrieval?.warningCode).map(r=>({id:r.id,warning:r.context.retrieval.warningCode})),latency:Object.fromEntries(['planSeconds','retrievalSeconds','answerSeconds','totalSeconds','firstPartialSeconds'].map(k=>[k,stat(rows,k)])),badCases:primary.filter(r=>r.score!==1).map(r=>({id:r.id,score:r.score,note:r.note})),adjudicator:'Executing AI assistant; no independent human review'};
+await fs.writeFile(path.join(out,'summary.json'),JSON.stringify(summary,null,2));
+const audit=rows.map(({id,category,question,expected,parsed,score,note,metrics,error,totalSeconds,invalidEvidenceIds})=>({id,category,question,expected,answer:parsed?.answer,score,note,metrics,error,totalSeconds,invalidEvidenceIds}));
+await fs.writeFile(path.join(out,'audit.json'),JSON.stringify(audit,null,2));
+const cols=['id','category','score','totalSeconds','question','expected','answer','note'],cell=x=>'"'+String(x??'').replaceAll('"','""')+'"';
+await fs.writeFile(path.join(out,'cases.csv'),'\uFEFF'+cols.join(',')+'\r\n'+audit.map(r=>cols.map(k=>cell(r[k])).join(',')).join('\r\n'));
+console.log(JSON.stringify(summary,null,2));

@@ -35,7 +35,7 @@ import { messageMarkdown } from './message-markdown.js';
 import { selectEvidence } from './research-evidence.js';
 import { groundedEvidenceAnswer } from './research-evidence.js';
 import { retrievalNotice } from './research-hybrid.js';
-import { planResearchQuery, quickQueryPlan, needsModelQueryPlan, retrievalPolicy } from './research-query.js';
+import { adaptiveQueryPlan, needsModelQueryPlan, retrievalPolicy } from './research-query.js';
 import { linkMatchesSelection } from './graph-focus.js';
 import { CANVAS_BACKGROUNDS, backgroundPreset, backgroundArtwork } from './canvas-backgrounds.js';
 import { captureStaticUI } from './static-ui-language.js';
@@ -2293,10 +2293,10 @@ function submitResearchQuestion(element, tab, chatKey) {
   const requestedMode = normalizeResearchMode(element.querySelector('#research-response-mode').value);
   recordUse('question');
   const buildMessages = async (signal, config, mode, onStage) => {
-    onStage(mode === 'expert' ? 'rewriting' : 'preparing');
-    const plan = mode === 'quick' ? quickQueryPlan(question, priorMessages) : await planResearchQuery(question,{history:priorMessages,nodes:scopedNodes,signal,identity:JSON.stringify([config.provider,config.model,config.endpoint]),generate:messages=>callAI(messages,config,1000,{json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(8000)])})});
+    onStage(mode === 'expert' || needsModelQueryPlan(question,scopedNodes,priorMessages) ? 'rewriting' : 'preparing');
+    const plan = await adaptiveQueryPlan(question,{mode,history:priorMessages,nodes:scopedNodes,signal,identity:JSON.stringify([config.provider,config.model,config.endpoint]),generate:(messages,planSignal)=>callAI(messages,config,700,{json:true,researchMode:'quick',signal:planSignal})});
     const policy=retrievalPolicy(plan,scopedNodes.length,mode);
-    const context = await prepareEvidence(scopedNodes, question, attachments, signal, policy.budget,plan,{topK:policy.topK,retrievalTimeoutMs:policy.retrievalTimeoutMs,onStage});
+    const context = await prepareEvidence(scopedNodes, question, attachments, signal, policy.budget,plan,{topK:policy.topK,retrievalTimeoutMs:policy.retrievalTimeoutMs,supplement:policy.supplement,onStage});
     const notice=retrievalNotice(context.retrieval,plan,language);if(notice)toast(notice);
     const textMessages = researchMessages(scopedNodes, priorMessages, question, context, mode);
     return { messages: withImages(textMessages, attachments.filter(a => a.image).map(a => a.image), config.protocol || 'openai-chat'), evidence: context.evidence };

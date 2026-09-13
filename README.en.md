@@ -10,7 +10,7 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.2.5 · Windows 10 / 11 x64 · MIT licensed**
+**1.2.6 · Windows 10 / 11 x64 · MIT licensed**
 
 > Fixes sample index preparation and cross-turn evidence IDs. Sources display up to 24 original opening words, with `...` for longer excerpts; originals shorter than ten words are shown fully, never padded. Unknown citations are explicitly marked unverified, never mapped to unrelated sources. Version history lives in the [changelog](RELEASE_NOTES.md).
 
@@ -358,7 +358,7 @@ Page references use retained **physical PDF file pages**. Markdown lines provide
 
 ### 2. Query planning: Preserve intent and separate retrieval targets
 
-The original question always participates in retrieval. Model-planned requests use bounded recent user questions and the active paper scope to produce up to four supplementary queries, together with two keyword levels:
+Question intent is retained; full titles identify the source scope while search text focuses on the requested facts rather than repeating long titles. Model-planned requests use bounded recent user questions and explicitly mentioned paper metadata, requesting two to three supplementary queries and up to six concrete terms (with support for the older two-level keyword format):
 
 - **High-level keywords:** themes, relationships and comparison axes, such as “reliability of inhibitory-control measurement.”
 - **Low-level keywords:** tasks, constructs, measures, populations or authors, such as “stop-signal task, SSRT, test–retest reliability.”
@@ -366,7 +366,7 @@ The original question always participates in retrieval. Model-planned requests u
 
 Planning preserves negation, temporal constraints, comparison targets, exact titles and DOIs, with cross-language expressions where useful. It produces retrieval cues rather than answers or guessed findings. Explicit title or DOI matches further restrict the candidate papers; query expansion does not expand the active paper scope.
 
-**Quick mode uses local bilingual expansion without a separate remote planning call.** Expert retains model planning; invalid plans fall back to the original question. Quick dense retrieval has a 1.2-second single-paper or 3.5-second multi-paper budget and falls back to lexical retrieval when unavailable or late. These are dense-retrieval budgets, not end-to-end answer guarantees.
+**Simple conceptual questions in Quick mode use local bilingual expansion without a separate remote planning call.** Precise facts, explicitly named papers, comparisons and Expert requests use compact, deadline-bounded planning. Failures retain local expansion and the fact-query evidence budget with a visible fallback notice. Quick dense retrieval has a 1.2-second budget for simple single-paper questions and 3.5 seconds otherwise, falling back to lexical retrieval when unavailable or late. These are dense-retrieval budgets, not end-to-end answer guarantees.
 
 ### 3. Hybrid retrieval and reranking: Exact terminology meets semantic matching
 
@@ -393,11 +393,12 @@ Fused candidates are deduplicated by chunk ID and selected as **complete passage
 | --- | ---: | ---: |
 | Quick · Local expansion · Single paper | 6 | 8,000 characters |
 | Quick · Local expansion · Multiple papers | 12 | 12,000 characters |
-| Expert · Model planning | 20 | 42,000 characters |
+| Quick · Precise facts / Comparisons · Model planning | 20 | 28,000 characters |
+| Expert · Model planning | 24 | 42,000 characters |
 
 Budgets cover evidence text, not the complete request's token count. Required metadata, instructions and bounded conversation history also enter the request. Actual evidence volume depends on passage length, source availability and relevance.
 
-The model-planned default of `top-k=20` follows a development comparison on the current sample corpus: across 12 development questions and 16 target evidence locations, `k=8/12` retrieved 15 locations, while `k=20` retrieved 16. Increasing to 32/48 added no target-evidence recall. The smaller setting reaching that development coverage was chosen to contain context cost. This is a parameter-selection result, not a guarantee for other corpora.
+In 1.2.6, precise facts and comparisons get one local coverage pass using query aspects and matching abstracts/lead paragraphs: at most six additional intact chunks and 8,400 additional characters, with a 48,000-character total cap. This pass does not call another model or build passage vectors on demand. It is a coverage heuristic, not exhaustive evidence verification. Query planning has a 16-second deadline and retains the larger fact-query budget on failure. Simple conceptual questions still need only one answer-model call.
 
 ### 5. Grounded generation: A shared contract and traceable sources
 
@@ -429,6 +430,8 @@ Before display, output structure and evidence IDs are checked, references to unk
 Caches reuse plans or vectors; evidence is selected for the current question. End-to-end latency also includes model startup, time to first output, answer length, network conditions and account limits. Local retrieval optimization alone cannot guarantee a fixed response time. See [research latency and the Quick path](docs/RESEARCH_LATENCY.md).
 
 ### 7. Incremental updates, evaluation and scaling boundaries
+
+See the [1.2.6 measured quality/latency report](docs/RAG_BENCHMARK_1.2.6.md): 97.75% reference recall, 100% strict necessary-fact accuracy and 20.60-second median backend completion on the known regression set. These are not all-corpus/all-model guarantees; scope and review limitations are reported explicitly.
 
 Saving Markdown automatically queues versioned passage vectors, merges short same-page/same-section fragments and checkpoints progress. Startup backfills older projects and resumes unfinished indexes; no Research-space indexing button is needed. Queries use ready vectors without embedding the collection on demand. Editing a source changes relevant chunk identities; unchanged inputs reuse cached vectors. Requests stay within the active project scope; hidden nodes do not re-enter answers through retained disk vectors.
 
