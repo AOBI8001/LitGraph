@@ -80,7 +80,7 @@ async function startDesktop() {
   });
   ipcMain.handle('desktop:save-config', (event, config) => {
     guard(event);
-    if (!safeStorage.isEncryptionAvailable()) throw Error('Windows credential encryption is unavailable. Configuration was not saved.');
+    if (!safeStorage.isEncryptionAvailable()) throw Error('Device credential encryption is unavailable. Configuration was not saved.');
     atomicWrite(keyPath, safeStorage.encryptString(JSON.stringify(config)));
     return true;
   });
@@ -124,7 +124,7 @@ async function startDesktop() {
     if (action === 'connect') return agentRunner.connect(data.provider);
     if (action === 'choose') {
       if (!['codex', 'claude'].includes(data.provider)) throw Error('Unsupported agent.');
-      const selected = await dialog.showOpenDialog(window, { title: 'Choose official agent executable', properties: ['openFile'], filters: [{ name: 'Executable', extensions: ['exe'] }] });
+      const selected = await dialog.showOpenDialog(window, { title: 'Choose official agent executable', properties: ['openFile'], ...(process.platform==='win32'?{filters:[{name:'Executable',extensions:['exe']}]}:{}) });
       if (selected.canceled) return null;
       return agentRunner.connect(data.provider, selected.filePaths[0]);
     }
@@ -159,7 +159,10 @@ async function startDesktop() {
   });
   const openOriginal = async file => {
     const error = await shell.openPath(file);
-    if (error) await new Promise((resolve, reject) => execFile('rundll32.exe', ['shell32.dll,OpenAs_RunDLL', file], { windowsHide: true }, err => err ? reject(err) : resolve()));
+    if (error) {
+      if(process.platform!=='win32')throw Error(error);
+      await new Promise((resolve, reject) => execFile('rundll32.exe', ['shell32.dll,OpenAs_RunDLL', file], { windowsHide: true }, err => err ? reject(err) : resolve()));
+    }
   };
   const openDataFolder = async folder => {
     const expected = path.resolve(dataRoot, 'data');

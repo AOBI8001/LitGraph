@@ -2,7 +2,7 @@
 
 # LitGraph
 
-1.2.8 separates relevance retrieval from scope coverage, adding source-backed paper cards, per-paper comparison/screening and batched collection synthesis. See [release notes](RELEASE_NOTES.md).
+1.2.9 removes repetitive retrieval bookkeeping from Research Space while preserving citations and meaningful uncertainty, and adds macOS installers. See [release notes](RELEASE_NOTES.md).
 
 _Connect the literature. Follow the evidence._
 
@@ -12,7 +12,7 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.2.8 · Windows 10 / 11 x64 · MIT licensed**
+**1.2.9 · Windows 10 / 11 x64 · macOS 13+ (Apple Silicon / Intel) · MIT licensed**
 
 > Fixes sample index preparation and cross-turn evidence IDs. Sources display up to 24 original opening words, with `...` for longer excerpts; originals shorter than ten words are shown fully, never padded. Unknown citations are explicitly marked unverified, never mapped to unrelated sources. Version history lives in the [changelog](RELEASE_NOTES.md).
 
@@ -38,12 +38,14 @@ See the relationships in the graph. Investigate them in conversation. Your paper
 ### Install
 
 1. Open [GitHub Releases](https://github.com/AOBI8001/LitGraph/releases/latest).
-2. Download `LitGraph-Setup-<version>-x64.exe` from the release assets.
-3. Run the installer, choose an installation location, and open LitGraph.
+2. Choose **Download for Windows**, or your chip under **Download for macOS**.
+3. Run the Windows `.exe`; on macOS open the `.dmg`, drag LitGraph into Applications, then launch it from Applications.
 
-The installer includes the application runtime; no separate Node.js or Python installation is required. Windows x64 is the currently distributed platform. LitGraph is free to use. Model usage charges and subscription access are governed by the providers you choose.
+Installers include the runtime, 50-paper sample and offline embedding model; no separate Node.js or Python is needed. macOS 13+ packages are available for Apple Silicon (arm64) and Intel (x64); see [macOS instructions](docs/MACOS.md). LitGraph is free to use. Model usage charges and subscription access are governed by the providers you choose.
 
 > ⚠️ **Installation notice:** Official installers are unsigned. Windows may display an unknown-publisher or SmartScreen warning. Use the files published in this repository and compare the installer checksum with `SHA256SUMS.txt` from the same release. Keep system security protections enabled.
+
+> macOS builds are ad-hoc signed, not Developer ID signed or Apple-notarized. After verifying the source and checksum, follow [Apple's per-app approval instructions](https://support.apple.com/en-au/102445) in Privacy & Security; do not disable system-wide protections.
 
 ### Your first project
 

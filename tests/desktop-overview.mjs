@@ -13,7 +13,7 @@ else {mock=http.createServer(async(req,res)=>{try{
  let raw='';for await(const chunk of req)raw+=chunk;const p=JSON.parse(JSON.parse(raw).messages.at(-1).content);requests++;
  assert.equal(p.scope.paperCount,50);assert.equal(p.scope.papersWithRetrievedEvidence,50);assert.equal(p.documents.length,50);assert.equal(p.scope.fullScopeRepresented,true);assert.equal(p.retrieval_status.strategy,'collection-overview');assert.equal(p.coverage.length,50);
  assert.equal(new Set(p.evidence.map(e=>e.documentId)).size,50);
- const answer=JSON.stringify({answer:'这些文献共同考察抑制控制、社会情境与测量可靠性。[E1][E50]',suggested_followups:['社会观察涉及哪些研究？','哪些论文研究测量信度？','哪些研究比较临床人群？']});res.writeHead(200,{'Content-Type':'text/event-stream'});res.end('data: '+JSON.stringify({choices:[{delta:{content:answer}}]})+'\n\ndata: [DONE]\n\n');
+ const answer=JSON.stringify({answer:'这些文献共同考察抑制控制、社会情境与测量可靠性。[E1][E50]\n\n本次共 50 篇论文，只有 7 篇送回了片段，且每篇均为少量摘录而非完整正文；其余 43 篇本次未送回任何片段，因此无法判断它们是否提到观察。',suggested_followups:['社会观察涉及哪些研究？','哪些论文研究测量信度？','哪些研究比较临床人群？']});res.writeHead(200,{'Content-Type':'text/event-stream'});res.end('data: '+JSON.stringify({choices:[{delta:{content:answer}}]})+'\n\ndata: [DONE]\n\n');
  }catch(e){res.writeHead(500);res.end(JSON.stringify({error:{message:e.message}}));}});await new Promise(r=>mock.listen(0,'127.0.0.1',r));}
 const env={...process.env,LITGRAPH_TEST_MODE:'1',LITGRAPH_TEST_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
 try {
@@ -28,7 +28,7 @@ try {
  await page.waitForFunction(()=>['done','error'].includes(JSON.parse(localStorage.getItem('litgraph.chat.v2.sample-project.project.')||'[]').at(-1)?.status),{},{timeout:180000});
  const record=await page.evaluate(()=>JSON.parse(localStorage.getItem('litgraph.chat.v2.sample-project.project.')).at(-1));
  assert.equal(record.status,'done',record.text);assert.ok(record.sources.length>0);assert.ok(!record.text.includes('Unknown evidence ID'));assert.ok(!record.text.includes('fulltext_indexed_excerpts_only'));
- if(!live)assert.equal(requests,1,'Overview has one answer call, no planner call');
+ if(!live){assert.equal(requests,1,'Overview has one answer call, no planner call');assert.doesNotMatch(record.text,/送回|43 篇|按摘录覆盖/);assert.match(record.text,/抑制控制/);assert.match(record.text,/原句/);}
  const report={live,status:record.status,elapsedMs:record.elapsedMs,stageTimings:record.stageTimings,answer:record.text,citedSources:record.sources.map(s=>s.documentId)};
  await writeFile(path.join(dataDir,'result.json'),JSON.stringify(report,null,2));await page.screenshot({path:path.join(dataDir,'answer.png')});
  console.log(JSON.stringify({passed:true,live,dataDir,elapsedMs:record.elapsedMs,stageTimings:record.stageTimings,citedSources:record.sources.length}));

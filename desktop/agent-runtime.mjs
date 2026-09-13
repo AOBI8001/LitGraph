@@ -43,6 +43,8 @@ export async function findAgent(provider) {
   const name = process.platform === 'win32' ? `${provider}.exe` : provider;
   const candidates = (process.env.PATH || '').split(path.delimiter).filter(Boolean).map(folder => path.join(folder.replace(/^"|"$/g, ''), name));
   candidates.push(path.join(os.homedir(), '.local', 'bin', name), path.join(os.homedir(), '.cargo', 'bin', name));
+  // Finder launches do not inherit a shell's Homebrew PATH.
+  if(process.platform==='darwin')candidates.push('/opt/homebrew/bin/'+name,'/usr/local/bin/'+name);
   if (process.platform === 'win32' && provider === 'codex' && process.env.LOCALAPPDATA) {
     const folder = path.join(process.env.LOCALAPPDATA, 'OpenAI', 'Codex', 'bin');
     const entries = await readdir(folder, { withFileTypes: true }).catch(() => []);

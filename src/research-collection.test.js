@@ -59,5 +59,5 @@ test('large overview batches cover all 150 papers without the old 120-paper cap'
 test('failed or incomplete model batches never claim complete review',async()=>{
  const nodes=docs(9).map(d=>d.node);
  const r=await prepareCollectionRequest({nodes,question:'哪些论文使用访谈',plan:{route:'coverage',task:'screen'},prepare:async batch=>({evidence:[],coverage:batch.map(n=>({id:n.id,suppliedEvidenceIds:[],status:'no_source_text'})),retrieval:{}}),generate:async()=>{throw Error('offline');}});
- assert.equal(JSON.parse(r.messages[1].content).scope.papersReviewed,0);assert.match(r.coverageNotice,/处理失败 9/);
+ assert.equal(JSON.parse(r.messages[1].content).scope.papersReviewed,0);assert.match(r.coverageNotice,/9 篇处理失败/);
 });

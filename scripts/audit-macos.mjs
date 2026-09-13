@@ -1,0 +1,16 @@
+import fs from 'node:fs/promises';
+import {createRequire} from 'node:module';
+import {createHash} from 'node:crypto';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+const require=createRequire(import.meta.url),builder=createRequire(require.resolve('electron-builder')),app=createRequire(builder.resolve('app-builder-lib')),asar=app('@electron/asar');
+const [bundle,arch]=process.argv.slice(2);assert.ok(['arm64','x64'].includes(arch));assert.equal(arch,process.arch);
+const version=JSON.parse(await fs.readFile('package.json','utf8')).version,archive=path.join(bundle,'Contents/Resources/app.asar');
+const files=asar.listPackage(archive).map(s=>s.replaceAll('\\','/').replace(/^\//,'')),extract=f=>asar.extractFile(archive,f).toString();
+const forbidden=files.filter(f=>!f.startsWith('node_modules/')&&/^(?:output|data|projects|release|\.codex|\.env)(?:\/|$)|(?:^|\/)(?:workspace-state\.json|model-config\.encrypted|credentials\.json|auth\.json|.*\.local\.json)$/.test(f));
+assert.deepEqual(forbidden,[]);assert.equal(JSON.parse(extract('package.json')).version,version);
+const corpus=JSON.parse(extract('dist/sample-fulltext/index.json'));assert.equal(corpus.documents.length,50);
+assert.ok(files.some(f=>f.includes('onnxruntime-node')&&f.includes('/darwin/'+arch+'/')),'Native ONNX runtime missing');
+const installer=`release/macos/LitGraph-${version}-macOS-${arch}.dmg`,bytes=await fs.readFile(installer),sha256=createHash('sha256').update(bytes).digest('hex');
+const report={version,arch,archiveEntries:files.length,forbidden,samplePapers:50,size:bytes.length,sha256,signing:'ad-hoc',notarized:false,commit:process.env.GITHUB_SHA};
+await fs.writeFile(`output/package-audit-macos-${arch}.json`,JSON.stringify(report,null,2));console.log(JSON.stringify(report));

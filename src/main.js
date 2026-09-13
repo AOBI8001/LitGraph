@@ -36,6 +36,7 @@ import { shouldRefreshLocalMetadata, extractSourceMetadata, applySourceMetadata,
 import { messageMarkdown } from './message-markdown.js';
 import { selectEvidence } from './research-evidence.js';
 import { groundedEvidenceAnswer } from './research-evidence.js';
+import {compactResearchAnswer,asksRetrievalDiagnostics} from './research-answer-style.js';
 import { retrievalNotice } from './research-hybrid.js';
 import { adaptiveQueryPlan, needsModelQueryPlan, retrievalPolicy } from './research-query.js';
 import { linkMatchesSelection } from './graph-focus.js';
@@ -2232,8 +2233,10 @@ function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode
   const run = new ResearchRequest(async (signal, onStage, onPartial) => {
     const { messages: requestMessages, evidence, coverageNotice, reviewLedger } = await buildMessages(signal, config, mode, onStage);
     onStage('generating');
+    let question='';try{question=JSON.parse(requestMessages.at(-1).content)?.research_question||'';}catch{}
+    const present=text=>compactResearchAnswer(text,language,{diagnostics:asksRetrievalDiagnostics(question)});
     let answer;
-    try { answer = await callAI(requestMessages, config, researchTokenBudget(config, mode), { signal, json: true, researchMode: mode,onText:raw=>onPartial(partialAnswer(raw)) }); }
+    try { answer = await callAI(requestMessages, config, researchTokenBudget(config, mode), { signal, json: true, researchMode: mode,onText:raw=>onPartial(present(partialAnswer(raw))) }); }
     catch (error) {
       if (error.name === 'TypeError') throw new Error(panelText('无法连接模型服务，请检查网络、API 地址及浏览器跨域权限后重试', 'Cannot reach the model service. Check your network, API URL and CORS permissions.'));
       throw error;
@@ -2242,7 +2245,7 @@ function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode
     if (!parsed || typeof parsed.answer !== 'string' || !parsed.answer.trim() || !Array.isArray(parsed.suggested_followups)) throw new Error(panelText('模型已返回内容，但未按要求提供 JSON 回答和三个后续问题；请重试', 'The model replied, but did not provide the required JSON answer and three follow-up questions. Retry.'));
     const followups = [...new Set(parsed.suggested_followups.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean))];
     if (followups.length !== 3 || followups.some(item => item.length > 160)) throw new Error(panelText('模型返回的后续问题格式不正确，请重试', 'Invalid follow-up question format. Retry.'));
-    const grounded=groundedEvidenceAnswer(parsed.answer,evidence,language);
+    const grounded=groundedEvidenceAnswer(present(parsed.answer),evidence,language);
     return { ...grounded,answer:coverageNotice?`${grounded.answer}\n\n> ${coverageNotice}`:grounded.answer,reviewLedger, suggested_followups: followups };
   }, (state, event) => {
     if (researchRequests.get(chatKey) !== state) return;

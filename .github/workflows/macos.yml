@@ -1,0 +1,63 @@
+name: Build and verify macOS installers
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mac:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            appdir: mac-arm64
+          - runner: macos-15-intel
+            arch: x64
+            appdir: mac
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.28.2'
+      - run: pnpm install --frozen-lockfile
+      - name: Install Electron runtime (explicit trusted dependency script)
+        run: node node_modules/electron/install.js
+      - name: Restore public sample and offline model
+        run: |
+          command -v 7zz || brew install sevenzip
+          node scripts/restore-release-resources.mjs
+      - run: pnpm test
+      - run: pnpm build && node scripts/prepare-desktop.mjs
+      - name: Build native DMG (ad-hoc signature, not notarized)
+        run: pnpm exec electron-builder --mac dmg --${{ matrix.arch }} --publish never --config.directories.output=release/macos
+      - name: Verify packaged application and native retrieval
+        env:
+          LITGRAPH_TEST_EXECUTABLE: ${{ github.workspace }}/release/macos/${{ matrix.appdir }}/LitGraph.app/Contents/MacOS/LitGraph
+        run: |
+          codesign --verify --deep --strict "release/macos/${{ matrix.appdir }}/LitGraph.app"
+          node scripts/audit-macos.mjs "release/macos/${{ matrix.appdir }}/LitGraph.app" "${{ matrix.arch }}"
+          node tests/desktop-overview.mjs
+          node tests/desktop-collection.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: |
+            release/macos/*.dmg
+            output/package-audit-macos-*.json
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-${{ matrix.arch }}-test-results
+          path: |
+            output/desktop/*/result.json
+            output/desktop/*/*.png
+          retention-days: 7
