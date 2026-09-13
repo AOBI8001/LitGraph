@@ -66,7 +66,7 @@
       "artifactName": "LitGraph-Setup-${version}-${arch}.${ext}"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [{"target":"dmg","arch":["arm64"]}],
       "category": "public.app-category.education",
       "minimumSystemVersion": "13.0.0",
       "icon": "src/assets/brand/litgraph-mark.png",

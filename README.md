@@ -12,7 +12,7 @@ LitGraph 是一款面向文献综述、理论比较与研究探索的桌面工�
 
 在图谱中看见结构，在对话中深入问题。论文与研究资料保存在你的设备上，AI 可以来自你选择的模型 API，也可以是通过 MCP 接入的外部 Agent。
 
-**1.2.9 · Windows 10 / 11 x64 · macOS 13+（Apple 芯片 / Intel）· MIT 开源**
+**1.2.9 · Windows 10 / 11 x64 · macOS 13+（Apple M 系列芯片）· MIT 开源**
 
 > 本版修复样例检索准备与跨轮证据编号问题。来源展示原文开头最多 24 个词，长片段以 `...` 省略；不足十词的原文完整展示、不补写。无法核验的引用明确标注，不冒充真实来源。完整版本变化统一记录在[更新日志](RELEASE_NOTES.md)。
 
@@ -41,7 +41,7 @@ LitGraph 是一款面向文献综述、理论比较与研究探索的桌面工�
 2. 选择 **Download for Windows**，或 **Download for macOS** 下与你的芯片匹配的文件。
 3. Windows 运行 `.exe` 安装；macOS 打开 `.dmg`，把 LitGraph 拖入 Applications，再从应用程序打开。
 
-安装包包含应用所需的运行环境、50 篇样例和离线向量模型，无需另外安装 Node.js 或 Python。macOS 分为 Apple 芯片（arm64）与 Intel（x64），最低 macOS 13；详见 [macOS 安装说明](docs/MACOS.md)。软件使用免费，远程模型调用费用及订阅权限由你选择的服务提供方决定。
+安装包包含应用所需的运行环境、50 篇样例和离线向量模型，无需另外安装 Node.js 或 Python。macOS 仅提供 Apple M 系列芯片（arm64）版本，最低 macOS 13，不提供 Intel Mac 包；详见 [macOS 安装说明](docs/MACOS.md)。软件使用免费，远程模型调用费用及订阅权限由你选择的服务提供方决定。
 
 > ⚠️ **安装提示：** 官方安装包尚未代码签名，Windows 可能显示“未知发布者”或 SmartScreen 提示。请使用本仓库发布的文件，并与同一 Release 中的 `SHA256SUMS.txt` 比对校验和；保留系统安全防护。
 

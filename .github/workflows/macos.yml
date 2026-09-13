@@ -13,9 +13,6 @@ jobs:
           - runner: macos-15
             arch: arm64
             appdir: mac-arm64
-          - runner: macos-15-intel
-            arch: x64
-            appdir: mac
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     steps:

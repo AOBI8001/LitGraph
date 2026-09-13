@@ -1,6 +1,6 @@
 # macOS 安装与构建
 
-需要 macOS 13 Ventura 或更新系统（[Electron 44 最低要求](https://releases.electronjs.org/release/v44.0.0)）。在“关于本机”查看芯片：Apple M 系列选 arm64，Intel 选 x64。打开对应 DMG，将 LitGraph 拖到 Applications，再从“应用程序”打开。
+需要 macOS 13 Ventura 或更新系统（[Electron 44 最低要求](https://releases.electronjs.org/release/v44.0.0)）。仅面向 Apple M 系列芯片（arm64），不提供 Intel Mac 版。打开 DMG，将 LitGraph 拖到 Applications，再从“应用程序”打开。
 
 ## 安全与数据
 
@@ -10,7 +10,7 @@ Windows 与 macOS 包均从源码构建，只带内置 50 篇样例、模型和�
 
 ## 构建与验证
 
-GitHub Actions 手动运行 `.github/workflows/macos.yml`，分别在 Apple Silicon 和 Intel macOS 15 runner 上构建相同提交，运行单元测试、安装包内容审计和隔离配置的桌面问答测试。无需开发者的本地配置或用户资料。测试使用本机模拟模型接口，验证真实 UI、原文检索与来源展示，不代表真实模型准确率测量。
+GitHub Actions 手动运行 `.github/workflows/macos.yml`，在 Apple Silicon macOS 15 runner 上构建，运行单元测试、安装包内容审计和隔离配置的桌面问答测试。无需开发者的本地配置或用户资料。测试使用本机模拟模型接口，验证真实 UI、原文检索与来源展示，不代表真实模型准确率测量。
 
 源码仓库不包含大体积样例全文和模型。`scripts/restore-release-resources.mjs` 只从已发布的 1.2.8 Windows 包中恢复相同的公共资源，并验证固定 SHA-256；不会复用旧版可执行代码，也不会读取开发者本地数据。依赖、前端和 Electron 由当前源码及锁文件重新构建。
 

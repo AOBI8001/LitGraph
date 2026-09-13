@@ -1,6 +1,6 @@
 # LitGraph 1.2.9
 
-2026-09-14 · Windows x64 / macOS 13+（Apple Silicon 与 Intel）
+2026-09-14 · Windows x64 / macOS 13+（仅 Apple Silicon M 系列）
 
 ## Download for Windows
 
@@ -8,18 +8,18 @@
 
 ## Download for macOS
 
-[**Download for macOS — Apple Silicon (M 系列)**](https://github.com/AOBI8001/LitGraph/releases/download/v1.2.9/LitGraph-1.2.9-macOS-arm64.dmg) · [**Download for macOS — Intel**](https://github.com/AOBI8001/LitGraph/releases/download/v1.2.9/LitGraph-1.2.9-macOS-x64.dmg)
+[**Download for macOS — Apple Silicon (M 系列)**](https://github.com/AOBI8001/LitGraph/releases/download/v1.2.9/LitGraph-1.2.9-macOS-arm64.dmg)
 
 - **回答聚焦研究结论**：取消每次回答自动追加的覆盖统计，调整提示词，不再反复说明“送回几篇片段”“其余论文未送回”“旧编号本轮无法核实”。对孤立的此类过程段落做保守精简；不改写带引用的研究结论和原文。
 - **保留必要的诚实边界**：原文证据、页码行号、引用未核验标记、具体证据不足和真实处理失败仍会提示，不把检索未命中说成没有相关研究。用户主动询问检索覆盖时仍可获得说明。旧历史不会被删除，也不额外调用模型润色。
-- **新增 macOS**：Apple Silicon / Intel 分别原生构建 DMG；适配打开原文、外部 CLI 选择及 Finder 启动时的路径。两平台均带内置 50 篇样例与离线模型，不含开发者个人项目、问答、密钥或设置。
+- **新增 macOS**：仅提供 Apple Silicon（M 系列）原生 DMG，不发布 Intel Mac 版；适配打开原文、外部 CLI 选择及 Finder 启动时的路径。两平台均带内置 50 篇样例与离线模型，不含开发者个人项目、问答、密钥或设置。
 
 Windows 安装包未签名。macOS 包采用 ad-hoc 临时签名，尚无 Apple Developer ID 签名或公证；最低 macOS 13。请核对同一 Release 中 SHA256SUMS.txt。Mac 安装请参考 [安装说明](https://github.com/AOBI8001/LitGraph/blob/v1.2.9/docs/MACOS.md)，保留系统安全防护。
 
 ## English
 
 - Remove repetitive excerpt-count and previous-ID bookkeeping from ordinary research answers. Preserve original quotations, verifiable citations, substantive uncertainty and genuine failures; explicit diagnostic questions are exempt. No additional rewriting model call.
-- Add native Apple Silicon and Intel macOS DMG builds alongside Windows. Isolated desktop tests exercise sample retrieval and answer presentation with a mock model; this is not a new live-model benchmark.
+- Add a native Apple Silicon M-series macOS DMG alongside Windows; no Intel Mac installer. Isolated desktop tests exercise sample retrieval and answer presentation with a mock model; this is not a new live-model benchmark.
 - macOS 13+; ad-hoc signed, **not Apple-notarized**. Both platforms contain only bundled sample resources and defaults, not developer profiles. Verify SHA256SUMS.txt before installing.
 
 ---

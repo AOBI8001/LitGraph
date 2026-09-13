@@ -20,8 +20,8 @@ if(action==='dispatch'){
  if(action==='download'&&run.conclusion!=='success')throw Error('Build/tests did not all pass');
  await mkdir('output/macos-artifacts',{recursive:true});
  const assets=action==='logs'?[{name:'logs-'+runId,url:base+`/actions/runs/${runId}/logs`}]:
-  (await api(`/actions/runs/${runId}/artifacts`)).artifacts.filter(a=>/^macos-(arm64|x64)$/.test(a.name)).map(a=>({name:a.name,url:a.archive_download_url}));
- if(action==='download'&&assets.length!==2)throw Error('Expected both native macOS artifacts');
+  (await api(`/actions/runs/${runId}/artifacts`)).artifacts.filter(a=>a.name==='macos-arm64').map(a=>({name:a.name,url:a.archive_download_url}));
+ if(action==='download'&&assets.length!==1)throw Error('Expected native Apple Silicon artifact');
  for(const a of assets){
   if(new URL(a.url).hostname!=='api.github.com')throw Error('Unexpected artifact URL');
   const redirect=await fetch(a.url,{headers:{Authorization:'Bearer '+token},redirect:'manual',signal:AbortSignal.timeout(60000)}),url=new URL(redirect.headers.get('location'));

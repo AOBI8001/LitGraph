@@ -12,7 +12,7 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.2.9 · Windows 10 / 11 x64 · macOS 13+ (Apple Silicon / Intel) · MIT licensed**
+**1.2.9 · Windows 10 / 11 x64 · macOS 13+ (Apple Silicon M series) · MIT licensed**
 
 > Fixes sample index preparation and cross-turn evidence IDs. Sources display up to 24 original opening words, with `...` for longer excerpts; originals shorter than ten words are shown fully, never padded. Unknown citations are explicitly marked unverified, never mapped to unrelated sources. Version history lives in the [changelog](RELEASE_NOTES.md).
 
@@ -41,7 +41,7 @@ See the relationships in the graph. Investigate them in conversation. Your paper
 2. Choose **Download for Windows**, or your chip under **Download for macOS**.
 3. Run the Windows `.exe`; on macOS open the `.dmg`, drag LitGraph into Applications, then launch it from Applications.
 
-Installers include the runtime, 50-paper sample and offline embedding model; no separate Node.js or Python is needed. macOS 13+ packages are available for Apple Silicon (arm64) and Intel (x64); see [macOS instructions](docs/MACOS.md). LitGraph is free to use. Model usage charges and subscription access are governed by the providers you choose.
+Installers include the runtime, 50-paper sample and offline embedding model; no separate Node.js or Python is needed. The macOS 13+ package supports Apple Silicon M-series (arm64) only; no Intel Mac build is distributed. See [macOS instructions](docs/MACOS.md). LitGraph is free to use. Model usage charges and subscription access are governed by the providers you choose.
 
 > ⚠️ **Installation notice:** Official installers are unsigned. Windows may display an unknown-publisher or SmartScreen warning. Use the files published in this repository and compare the installer checksum with `SHA256SUMS.txt` from the same release. Keep system security protections enabled.
 

@@ -13,13 +13,13 @@ const commit=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim();
 if(!execFileSync('git',['ls-remote','origin','refs/heads/main'],{encoding:'utf8'}).startsWith(commit))throw Error('Push the reviewed commit to main first');
 const credential=execFileSync('git',['credential','fill'],{input:'protocol=https\nhost=github.com\n\n',encoding:'utf8'});
 const token=credential.split(/\r?\n/).find(s=>s.startsWith('password='))?.slice(9);if(!token)throw Error('Missing GitHub credential');
-const base='https://api.github.com/repos/AOBI8001/LitGraph',tag='v'+version,names=[`LitGraph-Setup-${version}-x64.exe`,...['arm64','x64'].map(arch=>`LitGraph-${version}-macOS-${arch}.dmg`),'SHA256SUMS.txt'];
+const base='https://api.github.com/repos/AOBI8001/LitGraph',tag='v'+version,names=[`LitGraph-Setup-${version}-x64.exe`,`LitGraph-${version}-macOS-arm64.dmg`,'SHA256SUMS.txt'];
 const headers={Authorization:'Bearer '+token,Accept:'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28'};
 async function api(url,options={}){const u=new URL(url);if(!['api.github.com','uploads.github.com'].includes(u.hostname))throw Error('Unexpected upload host');const r=await fetch(url,{...options,headers:{...headers,...options.headers},signal:AbortSignal.timeout(options.body instanceof Blob?600000:60000)});if(!r.ok)throw Error('GitHub HTTP '+r.status);return r.json();}
 const hash=async file=>createHash('sha256').update(await readFile(file)).digest('hex');
 const audit=JSON.parse(await readFile(`output/package-audit-${version}.json`,'utf8'));
 if(audit.sha256!==await hash(`release/${version}/${names[0]}`)||audit.samplePapers!==50||audit.forbidden.length)throw Error('Installer audit does not match');
-for(const arch of ['arm64','x64']){
+for(const arch of ['arm64']){
  const mac=JSON.parse(await readFile(`output/package-audit-macos-${arch}.json`,'utf8'));
  if(mac.version!==version||mac.arch!==arch||mac.commit!==commit||mac.samplePapers!==50||mac.forbidden.length||mac.sha256!==await hash(`release/${version}/LitGraph-${version}-macOS-${arch}.dmg`))throw Error('macOS audit/commit mismatch: '+arch);
 }
