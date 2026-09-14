@@ -1,3 +1,31 @@
+# LitGraph 1.3.0
+
+2026-09-14 · Windows x64 / macOS 13+（仅 Apple Silicon M 系列）
+
+## Download for Windows
+
+[**Download for Windows — Windows 10 / 11 x64**](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.0/LitGraph-Setup-1.3.0-x64.exe)
+
+## Download for macOS
+
+[**Download for macOS — Apple Silicon (M 系列)**](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.0/LitGraph-1.3.0-macOS-arm64.dmg)
+
+- **快速回答更充分**：常规概念问题的引导篇幅由约 120–220 字调整为约 350–600 字，展开结论、关键证据与必要限制；多篇比较优先覆盖不同论文和方法维度，可以更长。简单事实问题仍可简短回答，不通过增加检索或额外润色请求凑字数。
+- **专家回答不再被追问格式拖累**：正文与追问独立校验，支持完整正文缺少追问、可恢复的 JSON 展示错误、代码围栏和直接 Markdown 回答。无效追问单独舍弃，不补造问题，不再因为未凑齐三个追问而丢弃正文。API 与外部 Agent 使用同一最终呈现校验。
+- **保留流式结果与真实错误**：网络断流、输出达到上限、服务拒答仍按失败处理；已收到的正文保留并明确标注尚未完成，不作为后续对话的已完成证据。引用仍按本次检索核验，不放宽未知引用、原句、页码和行号的规则。
+- 新增格式恢复、截断/拒答、跨协议流结束检查及五篇比较桌面回归。真实 API 对同一组五篇论文做了专家与快速模式检查；单次结果不代表性能中位数或新的准确率 benchmark。
+
+升级保留本机项目和配置。安装包仅包含内置样例与默认资源，不含开发者个人项目、问答历史或密钥。Windows 安装包未签名；macOS 13+ 包采用 ad-hoc 签名，**未做 Apple Developer ID 签名或公证**。请核对 SHA256SUMS.txt，参考 [Mac 安装说明](https://github.com/AOBI8001/LitGraph/blob/v1.3.0/docs/MACOS.md)，保留系统安全防护。
+
+## English
+
+- More substantial Quick answers: normally 350–600 Chinese characters or 220–380 English words, with flexible length for simple facts and multi-paper comparisons. No extra model call solely to lengthen or reformat an answer.
+- Validate the answer separately from optional follow-ups. Preserve complete answers with missing/malformed suggestions, recoverable JSON presentation errors, fences or final Markdown. Keep citation validation unchanged for API and external Agent responses.
+- Recognize stream completion and genuine failures across protocols. Preserve received partial text with an explicit unfinished label after a failure; never treat it as completed conversation evidence.
+- Add five-paper desktop and unit regressions. Live API checks are individual runs, not a new latency median or accuracy benchmark. Windows and Apple Silicon macOS only; macOS is ad-hoc signed, not notarized.
+
+---
+
 # LitGraph 1.2.9
 
 2026-09-14 · Windows x64 / macOS 13+（仅 Apple Silicon M 系列）

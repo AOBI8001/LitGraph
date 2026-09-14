@@ -9,6 +9,8 @@ assert.equal(researchModePolicy('expert').evidenceBudget, 42000);
 assert.equal(researchModePolicy('quick').priority, 'speed');
 assert.equal(researchModePolicy('expert').priority, 'depth');
 assert.match(researchModePolicy('quick').instruction, /provider-independent/);
+assert.match(researchModePolicy('quick').instruction, /350–600/);
+assert.match(researchModePolicy('quick').instruction, /Simple factual questions can be shorter/);
 assert.match(researchModePolicy('expert').instruction, /not a model identity/);
 assert.deepEqual(researchThinkingOptions(config, 'openai-chat', 'quick'), { thinking: { type: 'disabled' } });
 assert.deepEqual(researchThinkingOptions(config, 'openai-chat', 'expert'), { thinking: { type: 'enabled' }, reasoning_effort: 'high' });

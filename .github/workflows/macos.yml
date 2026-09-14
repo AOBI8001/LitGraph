@@ -43,6 +43,7 @@ jobs:
           node tests/desktop-overview.mjs
           node tests/desktop-collection.mjs
           node tests/desktop-125.mjs
+          node tests/desktop-130.mjs
       - uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}

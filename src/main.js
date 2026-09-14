@@ -22,6 +22,7 @@ import { closerCamera, navigationKeys, translateCamera } from './camera-navigati
 import { framePerspectiveModel, initialFramingPoints } from './perspective-framing.js';
 import { readAIResponse, researchTokenBudget } from './ai-response.js';
 import {createTextStream,partialAnswer} from './ai-stream.js';
+import {normalizeResearchResult} from './research-result.js';
 import { normalizeResearchMode, researchModePolicy, researchThinkingOptions, compatibleModelBody } from './research-mode.js';
 import { researchMessages } from './research-agent.js';
 import {prepareCollectionRequest} from './research-collection-flow.js';
@@ -665,7 +666,7 @@ async function callAI(messages, config = aiConfig, maxTokens = 240, options = {}
   }
   compatibleModelBody(body,config,protocol,options);
   if(options.onText)body.stream=true;
-  const streaming=options.onText?createTextStream(options.onText):null;
+  const streaming=options.onText?createTextStream(options.onText,{requireCompletion:true}):null;
   const response = await modelFetch(url, {
     method: 'POST',
     headers,
@@ -2230,8 +2231,10 @@ function updateResearchSendButton(element, chatKey) {
 function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode = 'quick') {
   const config = activeAIConfig();
   const mode = normalizeResearchMode(requestedMode);
+  let requestEvidence=[];
   const run = new ResearchRequest(async (signal, onStage, onPartial) => {
     const { messages: requestMessages, evidence, coverageNotice, reviewLedger } = await buildMessages(signal, config, mode, onStage);
+    requestEvidence=evidence;
     onStage('generating');
     let question='';try{question=JSON.parse(requestMessages.at(-1).content)?.research_question||'';}catch{}
     const present=text=>compactResearchAnswer(text,language,{diagnostics:asksRetrievalDiagnostics(question)});
@@ -2241,10 +2244,8 @@ function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode
       if (error.name === 'TypeError') throw new Error(panelText('无法连接模型服务，请检查网络、API 地址及浏览器跨域权限后重试', 'Cannot reach the model service. Check your network, API URL and CORS permissions.'));
       throw error;
     }
-    const parsed = safeJsonFromModel(answer);
-    if (!parsed || typeof parsed.answer !== 'string' || !parsed.answer.trim() || !Array.isArray(parsed.suggested_followups)) throw new Error(panelText('模型已返回内容，但未按要求提供 JSON 回答和三个后续问题；请重试', 'The model replied, but did not provide the required JSON answer and three follow-up questions. Retry.'));
-    const followups = [...new Set(parsed.suggested_followups.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean))];
-    if (followups.length !== 3 || followups.some(item => item.length > 160)) throw new Error(panelText('模型返回的后续问题格式不正确，请重试', 'Invalid follow-up question format. Retry.'));
+    const parsed = normalizeResearchResult(answer);
+    const followups = parsed.suggested_followups;
     const grounded=groundedEvidenceAnswer(present(parsed.answer),evidence,language);
     return { ...grounded,answer:coverageNotice?`${grounded.answer}\n\n> ${coverageNotice}`:grounded.answer,reviewLedger, suggested_followups: followups };
   }, (state, event) => {
@@ -2263,6 +2264,11 @@ function launchResearchRequest(chatKey, buildMessages, responseId, requestedMode
     if (message) {
       message.status = state.status;
       message.text = researchRunText(state);
+      // A genuine transport/format failure stays a failure, but do not erase
+      // already streamed text. It is labelled incomplete and excluded from
+      // future answer history (which only uses completed responses).
+      message.partialText = state.status === 'error' && state.partial?.trim()
+        ? groundedEvidenceAnswer(state.partial,requestEvidence,language).answer : undefined;
       message.elapsedMs = state.elapsed();
       message.stageTimings = {...state.timings};
       message.responseMode = mode;
@@ -2389,6 +2395,14 @@ function renderResearchDesk() {
       </div>
     </form>`;
   const history = element.querySelector('.deep-read-history');
+  for(const [index,message] of records.entries()){
+    if(message.status!=='error'||!message.partialText)continue;
+    const turn=history.querySelectorAll('.chat-turn')[index]?.querySelector('.chat-message');
+    if(!turn)continue;
+    const partial=document.createElement('div');partial.className='message-markdown';partial.dataset.incompleteAnswer='';
+    const label=document.createElement('p');label.textContent=panelText('以下为已收到的部分回答，尚未完成，结论需核验：','Partial answer received; unfinished, and conclusions need checking:');
+    partial.innerHTML=messageMarkdown(message.partialText);turn.append(label,partial);
+  }
   element.querySelector('#research-response-mode').addEventListener('change', event => localStorage.setItem('litgraph.researchMode', normalizeResearchMode(event.target.value)));
   element.querySelector('.research-retry-quick')?.addEventListener('click', () => researchRequests.get(chatKey)?.retryQuick());
   const tabbar = element.querySelector('.research-tabbar');
