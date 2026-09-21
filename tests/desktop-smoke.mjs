@@ -183,10 +183,10 @@ try {
  await application.evaluate(({shell})=>{globalThis.savedOpenExternal=shell.openExternal;shell.openExternal=async url=>{globalThis.feedbackURL=url;};});
  try {
   await page.getByRole('button',{name:'设置',exact:true}).click();
-  await page.getByRole('link',{name:/用户反馈/}).click();
+  await page.locator('a[href="https://my.feishu.cn/share/base/form/shrcnbw8bQOlnsv8EXdKFaXnoIy"]').click();
   await page.waitForTimeout(150);
   assert.equal(await application.evaluate(()=>globalThis.feedbackURL),'https://my.feishu.cn/share/base/form/shrcnbw8bQOlnsv8EXdKFaXnoIy');
-  await page.getByRole('link',{name:/产品网站/}).click();
+  await page.locator('a[href="https://litgraph.aobi.qzz.io/"]').click();
   await page.waitForTimeout(150);
   assert.equal(await application.evaluate(()=>globalThis.feedbackURL),'https://litgraph.aobi.qzz.io/');
   // Exercise the same trusted external-link handler without opening a real browser.

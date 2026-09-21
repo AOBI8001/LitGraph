@@ -5,6 +5,7 @@ import {validPaperCard} from './research-card.js';
 export function isCollectionOverview(question, paperCount=2) {
  if(paperCount<2)return false;
  const q=String(question);
+ if(/这\s*\d+\s*篇\s*(?:论文|文献|研究).{0,24}(?:主要|总体|整体|共同|围绕).{0,16}(?:研究问题|问题|主题|方向|研究什么|讲了什么|讨论什么)/i.test(q))return true;
  if(/(?:这些|这批|全部|所有).{0,12}(?:论文|文献|研究).{0,12}(?:讲了什么|讨论什么|研究什么|共同主题)/.test(q))return true;
  return /(?:这些|这批|全部|所有|整体|总体|文献库|论文库|本项目).{0,30}(?:主要研究|研究.{0,8}(?:问题|主题|方向)|共同.{0,8}(?:问题|主题)|概括|概览|综述|总结)/.test(q)
   || /(?:概括|概览|总结|综述).{0,20}(?:这些|这批|全部|所有|文献库|论文库)/.test(q)

@@ -10,7 +10,7 @@ await mkdir('output/desktop',{recursive:true});
 const dataDir=await mkdtemp(path.join(root,'output/desktop/research-130-'));
 const ids=['paper-036','paper-037','paper-038','paper-039','paper-040'];
 const tab={id:`selected.${ids.join('.')}`,type:'selected',nodeIds:ids,label:'已选 5 篇'};
-let app,mock,requests=0,fixture=0;
+let app,mock,answerRequests=0,plannerRequests=0,fixture=0;
 const replies=[
  '{"answer":"研究设计不同：实验操纵与综述汇总回答的问题不同。[E1]\\n\\n应分别核对任务、样本和测量指标。[E5]"}',
  '{"answer":"方法比较需要区分实验任务与测量结果。[E1]\\n\\n不能把设计差异直接当作效果差异。[E5]", "suggested_followups": ["核对哪些任务？",]}',
@@ -26,8 +26,14 @@ if(live){
 else {
  mock=http.createServer(async(req,res)=>{try{
   let raw='';for await(const chunk of req)raw+=chunk;
-  const body=JSON.parse(raw),p=JSON.parse(body.messages.at(-1).content);requests++;
-  assert.equal(p.scope.paperCount,5);assert.equal(new Set(p.evidence.map(e=>e.documentId)).size,5);
+  const body=JSON.parse(raw),p=JSON.parse(body.messages.at(-1).content);
+  if(Array.isArray(p.papers)&&!p.scope){
+   plannerRequests++;
+   const ids=p.papers.map(item=>item.id),reply=JSON.stringify({queries:['research design methods manipulation measures'],high_level_keywords:['research methods'],low_level_keywords:['participants','task','measure'],sections:['methods','results'],dimensions:[{label:'研究方法',query:'research design participants task manipulation measures',paperIds:ids,sections:['methods']}]});
+   res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({choices:[{message:{content:reply},finish_reason:'stop'}]}));return;
+  }
+  answerRequests++;
+  assert.equal(p.scope.paperCount,5);assert.equal(new Set(p.evidence.map(e=>e.documentId)).size,5,JSON.stringify({retrieval:p.retrieval_status,evidence:p.evidence.map(e=>({id:e.id,documentId:e.documentId,dimensions:e.comparisonDimensions}))}));
   assert.equal(body.thinking.type,p.response_mode==='expert'?'enabled':'disabled');
   if(p.response_mode==='quick')assert.match(p.response_guidance,/350–600/);
   const reply=replies[fixture++];assert.ok(reply);
@@ -69,7 +75,7 @@ try{
    await page.locator('[data-incomplete-answer]').waitFor();assert.match(await page.locator('.deep-read-history').innerText(),/尚未完成/);
   }else if(!baseline){assert.equal(record.status,'done',record.text);assert.ok(record.sources.length>0);assert.doesNotMatch(record.text,/无法完成分析|suggested_followups/);assert.ok(record.suggested_followups.length<=3);}
  }
- if(!live)assert.equal(requests,cases.length,'No extra formatting-repair model call');
+ if(!live){assert.equal(answerRequests,cases.length,'No extra formatting-repair answer call');assert.ok(plannerRequests>=1,'Comparison planner was not exercised');}
  await writeFile(path.join(dataDir,'result.json'),JSON.stringify({live,baseline,reports},null,2));
  await page.screenshot({path:path.join(dataDir,'answer.png')});console.log(JSON.stringify({passed:true,dataDir}));
 }finally{await app?.close().catch(()=>{});mock?.closeAllConnections();if(mock)await new Promise(r=>mock.close(r));}

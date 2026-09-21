@@ -2,7 +2,7 @@
 
 # LitGraph
 
-1.3.0 gives Quick answers more substance and preserves usable Expert answers when optional follow-up formatting fails. Available for Windows and Apple Silicon macOS. See [release notes](RELEASE_NOTES.md).
+1.3.1 routes local facts, multi-paper comparisons, and collection overviews separately. Comparisons retrieve evidence independently for each paper-by-dimension cell. Available for Windows and Apple Silicon macOS. See [release notes](RELEASE_NOTES.md).
 
 _Connect the literature. Follow the evidence._
 
@@ -12,7 +12,7 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.3.0 · Windows 10 / 11 x64 · macOS 13+ (Apple Silicon M series) · MIT licensed**
+**1.3.1 · Windows 10 / 11 x64 · macOS 13+ (Apple Silicon M series) · MIT licensed**
 
 > Fixes sample index preparation and cross-turn evidence IDs. Sources display up to 24 original opening words, with `...` for longer excerpts; originals shorter than ten words are shown fully, never padded. Unknown citations are explicitly marked unverified, never mapped to unrelated sources. Version history lives in the [changelog](RELEASE_NOTES.md).
 

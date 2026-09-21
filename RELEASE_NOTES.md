@@ -1,3 +1,33 @@
+# LitGraph 1.3.1
+
+2026-09-21 · Windows x64 / macOS 13+（仅 Apple Silicon M 系列）
+
+## Download for Windows
+
+[**Download for Windows — Windows 10 / 11 x64**](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.1/LitGraph-Setup-1.3.1-x64.exe)
+
+## Download for macOS
+
+[**Download for macOS — Apple Silicon (M 系列)**](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.1/LitGraph-1.3.1-macOS-arm64.dmg)
+
+- **三类研究问题分流**：局部事实继续使用混合相关检索；多篇比较进入逐篇取证；全库概括继续逐篇准备材料、分批并按需分层汇总，不让三类任务竞争同一组全局 Top-K。
+- **比较维度拆解**：复杂比较先拆成样本、方法、测量、操作、结果等独立检索维度，再为每个适用的“论文 × 维度”单元单独召回和重排。每个单元只向回答模型保留最佳原文依据；某篇某维度证据不足时明确保留空缺，不使用其他论文内容代填。
+- **细节证据排序**：对样本量、分组人数、年龄、双胞胎配对、剂量、时长、研究数量、测量定义和效应方向增加可解释的原文特征排序，并降低参考文献和高数字密度表格噪声的权重。
+- **全库汇总容错**：中间批次汇总若丢失引用或格式损坏，保留已完成、带来源编号的逐篇证据台账继续处理，不再让长时间运行的整个集合请求因一次压缩失败而作废。
+- **固定比较题回归**：在内置 50 节点样例（49 篇独立论文）的 20 道冻结跨论文比较题上，DeepSeek V4.1 Flash 快速/专家各运行 20 次、顺序执行且不重试。合并问题级准确率与语义证据召回均为 95%，完成率 100%，无效引用 0；快速模式首字/完整回答中位数 2.12/4.36 秒，专家模式 2.91/5.11 秒。该结果是已知固定语料专项回归，不代表任意领域或模型的统一保证，方法和口径见 [1.3.1 评测说明](docs/RAG_BENCHMARK_1.3.1.md)。
+
+升级保留本机项目和配置。安装包仅包含内置样例与默认资源，不含开发者个人项目、问答历史或密钥。Windows 安装包未签名；macOS 13+ 包采用 ad-hoc 签名，未做 Apple Developer ID 签名或公证。请核对 `SHA256SUMS.txt` 并保留系统安全防护。
+
+## English
+
+- Route local facts, multi-paper comparisons, and collection overviews through separate retrieval families instead of one global Top-K path.
+- Decompose comparisons into bounded paper-by-dimension retrieval cells. Retrieve and rank each cell independently, pass only its best source excerpt to the answer model, and leave unsupported cells explicitly unresolved.
+- Improve source ranking for sample sizes, group counts, ages, twin pairs, dose, duration, study counts, measurement definitions, and effect statements; down-rank reference and table noise.
+- Preserve the cited per-paper evidence ledger when an intermediate collection synthesis drops citations or returns malformed output.
+- On 20 frozen cross-paper comparison questions over the bundled sample, 40 sequential DeepSeek V4.1 Flash runs (Quick and Expert, no answer retries) reached 95% question accuracy, 95% semantic evidence recall, 100% completion, and zero invalid citations. This is a known-suite regression, not a general accuracy guarantee; see [the 1.3.1 benchmark note](docs/RAG_BENCHMARK_1.3.1.md).
+
+---
+
 # LitGraph 1.3.0
 
 2026-09-14 · Windows x64 / macOS 13+（仅 Apple Silicon M 系列）

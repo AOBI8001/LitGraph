@@ -2314,7 +2314,7 @@ function submitResearchQuestion(element, tab, chatKey) {
     const policy=retrievalPolicy(plan,scopedNodes.length,mode);
     if(plan.route==='coverage'){
       const request=await prepareCollectionRequest({nodes:scopedNodes,question,history:priorMessages,plan,mode,signal,language,onStage,cache:collectionCache,
-        prepare:(batch,batchPlan)=>prepareEvidence(batch,question,[],signal,42000,batchPlan,{topK:policy.topK,onStage:stage=>onStage(stage)}),
+        prepare:(batch,batchPlan)=>prepareEvidence(batch,question,[],signal,42000,batchPlan,{topK:policy.topK,perPaperCandidates:policy.perPaperCandidates,perPaperFinal:policy.perPaperFinal,onStage:stage=>onStage(stage)}),
         generate:(messages,tokens)=>callAI(messages,config,tokens,{signal:AbortSignal.any([signal,AbortSignal.timeout(120000)]),json:true,researchMode:'quick'})});
       if(attachments.length){request.messages[0].content+=' This collection review uses the selected library papers only; newly attached materials were not part of its per-paper review. State that exclusion when relevant.';request.coverageNotice+=' '+panelText('本次范围核查仅处理项目论文，未纳入临时附件。','Temporary attachments were not included in this scoped library review.');}
       return request;

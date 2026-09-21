@@ -148,7 +148,7 @@ export async function prepareEvidence(nodes, question, attachments = [], signal,
   onStage('retrieving');
   const result = plan ? await retrieveInWorker(documents.map(({node,document})=>({node,document:document?{...document,original:undefined}:null})), question, plan, {signal,budget,...retrievalOptions}) : {evidence:selectEvidence(documents,question,budget)};
   const {evidence}=result;
-  return { ...result, coverage: sourceCoverage(documents,evidence) };
+  return { ...result, coverage: result.coverage || sourceCoverage(documents,evidence) };
 }
 export async function originalBlob(node) {
   if (node.fulltextStorageKey) {
