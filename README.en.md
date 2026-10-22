@@ -16,7 +16,7 @@ See the relationships in the graph. Investigate them in conversation. Your paper
 
 > Fixes sample index preparation and cross-turn evidence IDs. Sources display up to 24 original opening words, with `...` for longer excerpts; originals shorter than ten words are shown fully, never padded. Unknown citations are explicitly marked unverified, never mapped to unrelated sources. Version history lives in the [changelog](RELEASE_NOTES.md).
 
-[Download](https://github.com/AOBI8001/LitGraph/releases/latest) · [Website](https://litgraph.aobi.qzz.io/) · [Feedback](https://github.com/AOBI8001/LitGraph/issues)
+[Download for Windows](https://litgraph.aobi.qzz.io/downloads/windows) · [Download for macOS (Apple Silicon)](https://litgraph.aobi.qzz.io/downloads/macos) · [Website](https://litgraph.aobi.qzz.io/) · [GitHub fallback](https://github.com/AOBI8001/LitGraph/releases/latest) · [Feedback](https://github.com/AOBI8001/LitGraph/issues)
 
 ---
 
@@ -37,8 +37,8 @@ See the relationships in the graph. Investigate them in conversation. Your paper
 
 ### Install
 
-1. Open [GitHub Releases](https://github.com/AOBI8001/LitGraph/releases/latest).
-2. Choose **Download for Windows**, or your chip under **Download for macOS**.
+1. Choose **Download for Windows** or **Download for macOS** on the [official website](https://litgraph.aobi.qzz.io/#download). The installer downloads directly without opening GitHub.
+2. macOS supports Apple Silicon only. [Version, file sizes and SHA-256 hashes](https://litgraph.aobi.qzz.io/downloads/manifest.json) are available on the website; [GitHub Releases](https://github.com/AOBI8001/LitGraph/releases/latest) remains a fallback and version archive.
 3. Run the Windows `.exe`; on macOS open the `.dmg`, drag LitGraph into Applications, then launch it from Applications.
 
 Installers include the runtime, 50-paper sample and offline embedding model; no separate Node.js or Python is needed. The macOS 13+ package supports Apple Silicon M-series (arm64) only; no Intel Mac build is distributed. See [macOS instructions](docs/MACOS.md). LitGraph is free to use. Model usage charges and subscription access are governed by the providers you choose.

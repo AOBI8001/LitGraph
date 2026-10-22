@@ -4,11 +4,13 @@
 
 ## Download for Windows
 
-[**Download for Windows — Windows 10 / 11 x64**](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.1/LitGraph-Setup-1.3.1-x64.exe)
+[**Download for Windows — Windows 10 / 11 x64**](https://litgraph.aobi.qzz.io/downloads/windows)
 
 ## Download for macOS
 
-[**Download for macOS — Apple Silicon (M 系列)**](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.1/LitGraph-1.3.1-macOS-arm64.dmg)
+[**Download for macOS — Apple Silicon (M 系列)**](https://litgraph.aobi.qzz.io/downloads/macos)
+
+2026-10-22：官网新增双平台直接下载入口，无需跳转 GitHub；当前安装包仍为 1.3.1，内容及校验和不变。上述官网入口跟随最新正式版；本页下方 GitHub Assets 保留本版本原始安装包。[查看官网下载文件信息](https://litgraph.aobi.qzz.io/downloads/manifest.json)。
 
 - **三类研究问题分流**：局部事实继续使用混合相关检索；多篇比较进入逐篇取证；全库概括继续逐篇准备材料、分批并按需分层汇总，不让三类任务竞争同一组全局 Top-K。
 - **比较维度拆解**：复杂比较先拆成样本、方法、测量、操作、结果等独立检索维度，再为每个适用的“论文 × 维度”单元单独召回和重排。每个单元只向回答模型保留最佳原文依据；某篇某维度证据不足时明确保留空缺，不使用其他论文内容代填。

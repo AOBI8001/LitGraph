@@ -16,7 +16,7 @@ LitGraph 是一款面向文献综述、理论比较与研究探索的桌面工�
 
 > 本版修复样例检索准备与跨轮证据编号问题。来源展示原文开头最多 24 个词，长片段以 `...` 省略；不足十词的原文完整展示、不补写。无法核验的引用明确标注，不冒充真实来源。完整版本变化统一记录在[更新日志](RELEASE_NOTES.md)。
 
-[下载安装包](https://github.com/AOBI8001/LitGraph/releases/latest) · [产品网站](https://litgraph.aobi.qzz.io/) · [反馈与建议](https://github.com/AOBI8001/LitGraph/issues)
+[下载 Windows 版](https://litgraph.aobi.qzz.io/downloads/windows) · [下载 macOS 版（Apple 芯片）](https://litgraph.aobi.qzz.io/downloads/macos) · [产品网站](https://litgraph.aobi.qzz.io/) · [GitHub 备用下载](https://github.com/AOBI8001/LitGraph/releases/latest) · [反馈与建议](https://github.com/AOBI8001/LitGraph/issues)
 
 ---
 
@@ -37,8 +37,8 @@ LitGraph 是一款面向文献综述、理论比较与研究探索的桌面工�
 
 ### 安装
 
-1. 前往 [GitHub Releases](https://github.com/AOBI8001/LitGraph/releases/latest)。
-2. 选择 **Download for Windows**，或 **Download for macOS** 下与你的芯片匹配的文件。
+1. 在[官网](https://litgraph.aobi.qzz.io/#download)选择 **下载 Windows 版** 或 **下载 macOS 版**，点击后直接下载安装包，无需打开 GitHub。
+2. macOS 仅支持 Apple M 系列芯片。官网提供[版本、文件大小和 SHA-256](https://litgraph.aobi.qzz.io/downloads/manifest.json)；[GitHub Releases](https://github.com/AOBI8001/LitGraph/releases/latest)保留备用下载与版本记录。
 3. Windows 运行 `.exe` 安装；macOS 打开 `.dmg`，把 LitGraph 拖入 Applications，再从应用程序打开。
 
 安装包包含应用所需的运行环境、50 篇样例和离线向量模型，无需另外安装 Node.js 或 Python。macOS 仅提供 Apple M 系列芯片（arm64）版本，最低 macOS 13，不提供 Intel Mac 包；详见 [macOS 安装说明](docs/MACOS.md)。软件使用免费，远程模型调用费用及订阅权限由你选择的服务提供方决定。
