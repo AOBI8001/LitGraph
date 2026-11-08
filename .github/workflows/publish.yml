@@ -1,0 +1,44 @@
+name: Publish verified desktop release
+on:
+  workflow_dispatch:
+    inputs:
+      windows_run:
+        description: Successful Windows build run ID
+        required: true
+        type: string
+      macos_run:
+        description: Successful Apple Silicon build run ID
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-x64
+          run-id: ${{ inputs.windows_run }}
+          github-token: ${{ github.token }}
+          path: artifacts/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: macos-arm64
+          run-id: ${{ inputs.macos_run }}
+          github-token: ${{ github.token }}
+          path: artifacts/macos
+      - name: Verify source, audits and digests before publishing both platforms
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          WINDOWS_RUN: ${{ inputs.windows_run }}
+          MACOS_RUN: ${{ inputs.macos_run }}
+        run: node scripts/publish-ci-release.mjs
