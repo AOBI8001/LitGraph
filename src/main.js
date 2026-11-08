@@ -33,7 +33,8 @@ import { externalState, refreshExternal, externalInstructions, externalCompletio
 import { extractFile, saveFulltext, saveOriginalFile, prepareEvidence, imageAttachment, withImages, originalBlob, getFulltext } from './fulltext.js';
 import { HISTORY_KEY, restoreJobs, createImportJob, jobCounts, moveTab, processImportItem, processImportBatch, setImportCanvasVisibility } from './import-jobs.js';
 import { paperAnalysisMessages, validatePaperAnalysis } from './paper-analysis.js';
-import { shouldRefreshLocalMetadata, extractSourceMetadata, applySourceMetadata, verifiedModelMetadata, metadataFrontmatter, SOURCE_METADATA_VERSION } from './local-metadata.js';
+import { extractSourceMetadata, applySourceMetadata, verifiedModelMetadata, metadataFrontmatter, shouldRepairSourceMetadata } from './local-metadata.js';
+import { repairSourceMetadata } from './source-metadata-repair.js';
 import { messageMarkdown } from './message-markdown.js';
 import { selectEvidence } from './research-evidence.js';
 import { groundedEvidenceAnswer } from './research-evidence.js';
@@ -2545,7 +2546,8 @@ function renderInspector(node) {
         <span class="badge badge-citation" title="${escapeHtml([node.citationSource,node.citationRetrievedAt?.slice(0,10)].filter(Boolean).join(' · '))}"><b>${t('citations')}：</b>${formatNumber(node.citations)}</span>
       </div>
       <h2><button id="paper-title-link" type="button">${escapeHtml(node.title)}</button></h2>
-      <p class="paper-authors">${escapeHtml(node.authors.join(', '))}</p>
+      <p class="paper-authors">${escapeHtml((node.authors || []).join(', ') || panelText('作者待确认', 'Author pending confirmation'))}</p>
+      ${node.sourceMetadataState?.missing?.length ? `<p class="paper-metadata-status paper-fulltext-status" role="status">${panelText('文献信息待确认：','Bibliographic fields pending: ')}${escapeHtml(node.sourceMetadataState.missing.map(field=>({title:panelText('标题','title'),authors:panelText('作者','authors'),year:panelText('年份','year')})[field]).join('、'))}</p><button id="repair-paper-metadata" class="paper-process-action" type="button" ${discoveryImporting || discoverySearching ? 'disabled' : ''}>${panelText('重新识别文献信息','Retry bibliographic extraction')}</button>` : ''}
       <a class="paper-doi" href="${escapeHtml(paperSource(node))}" target="_blank" rel="noreferrer">${escapeHtml(node.doi || node.url || panelText('无 DOI / URL', 'No DOI / URL'))}</a>
       <div class="paper-actions">
         <button id="open-pdf-button" type="button" ${node.sampleMarkdown && !node.hasPdf && !node.originalRelativePath ? `disabled title="${panelText('样例仅附带 MD，未附带 PDF', 'Sample includes Markdown, not PDF')}"` : ''}><span class="action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"><path d="M7 3.5h7l3 3V20H7z"/><path d="M14 3.5V7h3M10 11h4M10 14h4"/></svg></span><b>${panelText('原文', 'Full text')}</b></button>
@@ -2575,6 +2577,22 @@ function renderInspector(node) {
   document.querySelector('#paper-title-link').addEventListener('click', () => openPaper(node));
   document.querySelector('#open-pdf-button').addEventListener('click', () => openPaper(node));
   document.querySelector('#process-paper-button')?.addEventListener('click', () => void processSinglePaper(node));
+  document.querySelector('#repair-paper-metadata')?.addEventListener('click', async(event) => {
+    const projectId=currentProjectId,button=event.currentTarget;
+    button.disabled=true;
+    try{
+      const original=await getFulltext(node);
+      if(!original?.markdown)throw Error(panelText('请先补充可读取的原文。','Please add a readable original first.'));
+      if(node.sourceMetadataState)delete node.sourceMetadataState.modelAttempt;
+      await refreshLocalMetadata(node,original,new AbortController().signal);
+      if(projectId!==currentProjectId||!nodes.includes(node))return;
+      saveCurrentProject();
+      await localRequest('project',{projectId,project:cleanProjectForExport()});
+      render();renderInspector(node);
+      toast(node.sourceMetadataState?.status==='complete'?panelText('文献信息已核对并保存。','Bibliographic fields verified and saved.'):panelText('已保存可确认的信息，其余字段仍待确认。','Confirmed fields saved; remaining fields need confirmation.'));
+    }catch(error){toast(localizedError(error,language));}
+    finally{if(button.isConnected)button.disabled=false;}
+  });
   document.querySelector('#institution-paper-button')?.addEventListener('click',()=>void openInstitutionWindow(node));
   document.querySelector('#delete-inspector-paper').addEventListener('click',()=>void deletePaperNodes([node.id]));
   document.querySelector('#ask-paper-button').addEventListener('click', () => openDeepReadWindow(node));
@@ -2982,6 +3000,10 @@ function renderDataView() {
     if (!record) return;
     const field = event.target.dataset.editField;
     record[field] = event.target.type === 'checkbox' ? event.target.checked : event.target.type === 'number' ? Number(event.target.value) : event.target.value;
+    if (dataEntity === 'nodes' && ['title','authors','year','doi'].includes(field)) {
+      record.metadataOverrides = { ...record.metadataOverrides, [field]: true };
+    }
+    saveCurrentProject();
     toast(panelText('修改已保存', 'Changes saved'));
   }));
   dataView.querySelector('#delete-data-button')?.addEventListener('click', async () => {
@@ -3752,11 +3774,11 @@ async function lookupScholarlyMetadata({ doi = '', title = '' }) {
 
 function applyScholarlyMetadata(node, metadata) {
   if (!metadata) return node;
-  if (metadata.title) node.title = metadata.title;
-  if (metadata.year) node.year = metadata.year;
+  if (metadata.title && !node.metadataOverrides?.title) node.title = metadata.title;
+  if (metadata.year && !node.metadataOverrides?.year) node.year = metadata.year;
   if (metadata.language && metadata.language!=='unknown') node.language = metadata.language;
-  if (metadata.authors?.length) node.authors = metadata.authors;
-  if (metadata.doi) node.doi = metadata.doi;
+  if (metadata.authors?.length && !node.metadataOverrides?.authors) node.authors = metadata.authors;
+  if (metadata.doi && !node.metadataOverrides?.doi) node.doi = metadata.doi;
   if (metadata.abstract) {
     node.abstract = metadata.abstract;
     node.abstractSource = metadata.abstractSource || metadata.metadataSource || 'OpenAlex';
@@ -4273,32 +4295,36 @@ function saveImportProgress(job, node, item) {
   if (selectedNode?.id === node.id) renderInspector(node);
 }
 async function refreshLocalMetadata(node, document, signal) {
-  if(!document?.markdown)return;
-  applySourceMetadata(node,extractSourceMetadata(document.markdown));
-  if(!shouldRefreshLocalMetadata(node))return;
-  node.doi=normalizedDoi(node.doi);
-  try {
-    const {metadata}=await localRequest('metadata',{doi:node.doi,title:node.title},{signal});
-    if(metadata){applyScholarlyMetadata(node,metadata);node.metadataWarning='';}
-    else node.metadataWarning=panelText('暂未找到精确匹配的学术记录，被引量保持未知。','No exact scholarly record found; citation count remains unknown.');
-  } catch(error){signal.throwIfAborted();node.metadataWarning=localizedError(error,language);}
-  node.metadataChecked=true;rebuildMetadataCitationLinks();
+  const projectId=currentProjectId;
+  const config=activeAIConfig();
+  await repairSourceMetadata(node,document,{
+    signal,
+    lookup:async(data,lookupSignal)=>(await localRequest('metadata',data,{signal:lookupSignal})).metadata,
+    applyRemote:applyScholarlyMetadata,
+    modelIdentity:JSON.stringify([config.provider,config.model,config.endpoint]),
+    model:aiAvailable()?async(messages,modelSignal)=>safeJsonFromModel(await callAI(messages,activeAIConfig(),1600,
+      {json:true,researchMode:'quick',signal:AbortSignal.any([modelSignal,AbortSignal.timeout(45000)].filter(Boolean))})):undefined
+  });
+  if(projectId===currentProjectId&&nodes.includes(node))rebuildMetadataCitationLinks();
 }
 async function repairProjectSourceMetadata() {
   const projectId=currentProjectId,scope=nodes;
   let changed=0;
   for(const node of scope){
     if(currentProjectId!==projectId||nodes!==scope)return;
-    if(!node.importedLocally||node.importCanvasHidden||node.sourceMetadataVersion===SOURCE_METADATA_VERSION)continue;
+    if(!shouldRepairSourceMetadata(node))continue;
     try{
       const original=await getFulltext(node);
       if(currentProjectId!==projectId||nodes!==scope)return;
       if(!original?.markdown)continue;
-      applySourceMetadata(node,extractSourceMetadata(original.markdown));changed++;
+      applySourceMetadata(node,extractSourceMetadata(original.markdown,node));changed++;
     }catch{/* A missing original must not block other records. */}
     if(changed&&changed%20===0){saveCurrentProject();await new Promise(resolve=>setTimeout(resolve,0));}
   }
-  if(changed&&currentProjectId===projectId&&nodes===scope){saveCurrentProject();render();if(selectedNode)renderInspector(selectedNode);}
+  if(changed&&currentProjectId===projectId&&nodes===scope){
+    saveCurrentProject();render();if(selectedNode)renderInspector(selectedNode);
+    try{await localRequest('project',{projectId,project:cleanProjectForExport()});}catch{/* The desktop workspace snapshot remains saved. */}
+  }
 }
 async function analyzeOriginal(node, signal) {
   await refreshLocalMetadata(node,await getFulltext(node),signal);
@@ -4322,14 +4348,14 @@ async function analyzeOriginal(node, signal) {
   const analysisMessages=paperAnalysisMessages(node,text,peers,project.theories,answerLanguage);
   analysisMessages[0].content+=' Also return paperCard with researchQuestion, population, methods and findings fields. Each field is {"quote":"one exact contiguous substantive passage from original_excerpts"}; use null when not explicit. Keep each quote under 900 characters. Do not translate, infer or invent missing fields. These are source-backed cards, not additional prose summaries.';
   analysisMessages[0].content+=' Also return an optional bibliography object: {"title":{"value":"original title","quote":"exact title passage"},"authors":[{"name":"paper author, not supervisor","quote":"exact byline passage"}],"year":{"value":2024,"quote":"exact publication or thesis date passage"}}. Use only supplied frontmatter, not reference entries or grants/received dates. Omit uncertain fields. Do not infer citation counts. Quotes must be literal source passages.';
-  const analysisInput=JSON.parse(analysisMessages[1].content);analysisInput.frontmatter=metadataFrontmatter(document.markdown);analysisMessages[1].content=JSON.stringify(analysisInput);
+  const analysisInput=JSON.parse(analysisMessages[1].content);analysisInput.frontmatter=metadataFrontmatter(document.markdown,node);analysisMessages[1].content=JSON.stringify(analysisInput);
   const raw = await callAI(analysisMessages, activeAIConfig(), 5000,
     {json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(180000)])});
   signal.throwIfAborted();
   const result = validatePaperAnalysis(safeJsonFromModel(raw),text,peers);
   node.researchCard=buildPaperCard(node,document,result.paperCard);
   document.paperCard=node.researchCard;
-  applySourceMetadata(node,verifiedModelMetadata(result.bibliography,document.markdown));
+  applySourceMetadata(node,verifiedModelMetadata(result.bibliography,document.markdown,node));
   node.summary = result.summary.trim();
   node.summaryLanguage = answerLanguage;
   node.aiSummaryEn = answerLanguage === 'en' ? node.summary : '';

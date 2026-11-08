@@ -187,6 +187,8 @@ Institution search also has a two-minute manual verification limit, after which 
 
 The full available author list is preserved in the data. Compact canvas labels show one author, `A & B` for two authors, or the first author followed by `et al.` for three or more.
 
+Local imports locate the target title and byline in the original before resolving a DOI or verified title against scholarly records. Filename annotations, preceding articles, column labels and supervisors are not author evidence. Opening legacy projects repairs confirmed fields locally. Missing fields stay visibly pending and can be retried with **Retry bibliographic extraction**, without rerunning paper analysis. When a model is connected, necessary extraction uses the target region and validates source quotations. Manual edits are preserved; uncertain names and dates remain unknown. See [metadata identification and test boundaries](docs/SOURCE_METADATA.md).
+
 Abstracts come from source-provided abstract fields. Citation counts retain their source and retrieval time, with missing values left unknown. A formatted citation for a paper, the references it cites, and the number of citations it has received are three separately handled kinds of information.
 
 ## 📊 Explore the structure of the literature
