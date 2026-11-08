@@ -1,0 +1,50 @@
+name: Build and verify Windows installer
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '10.28.2'
+      - run: pnpm install --frozen-lockfile
+      - name: Install Electron runtime
+        run: node node_modules/electron/install.js
+      - name: Read version
+        run: node --input-type=module -e "import fs from 'node:fs';fs.appendFileSync(process.env.GITHUB_ENV,'APP_VERSION='+JSON.parse(fs.readFileSync('package.json','utf8')).version+'\n')"
+      - name: Restore public sample and offline model
+        env:
+          SEVEN_ZIP: C:\Program Files\7-Zip\7z.exe
+        run: node scripts/restore-release-resources.mjs
+      - run: pnpm test
+      - run: pnpm build
+      - run: node scripts/prepare-desktop.mjs
+      - run: pnpm check:release
+      - name: Build Windows NSIS installer
+        run: pnpm exec electron-builder --win nsis --x64 --publish never "--config.directories.output=release/$env:APP_VERSION"
+      - name: Audit packaged contents and installer
+        run: node scripts/audit-installer.mjs
+      - name: Verify packaged application
+        env:
+          LITGRAPH_TEST_EXECUTABLE: ${{ github.workspace }}/release/${{ env.APP_VERSION }}/win-unpacked/LitGraph.exe
+        run: |
+          node tests/desktop-smoke.mjs
+          node tests/desktop-metadata.mjs
+          node tests/desktop-124.mjs
+          node tests/desktop-130.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: |
+            release/*/LitGraph-Setup-*-x64.exe
+            output/package-audit-*.json
+          if-no-files-found: error
+          retention-days: 14

@@ -21,7 +21,8 @@ await writeFile(path.join(dataDir,'workspace-state.json'),JSON.stringify({'litgr
 const env={...process.env,LITGRAPH_TEST_MODE:'1',LITGRAPH_TEST_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
 let app;const errors=[],lookups=[];
 try{
- app=await electron.launch({executablePath:path.join(root,'node_modules/electron/dist/electron.exe'),args:[root],env,timeout:60000});
+ const executablePath=process.env.LITGRAPH_TEST_EXECUTABLE||path.join(root,'node_modules/electron/dist/electron.exe');
+ app=await electron.launch({executablePath,args:process.env.LITGRAPH_TEST_EXECUTABLE?[]:[root],env,timeout:60000});
  const page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/__litgraph/metadata',route=>{lookups.push(route.request().postDataJSON());return route.fulfill({json:{metadata:null}});});
  const state=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('litgraph.projects.v1'))['metadata-fixture'].data);

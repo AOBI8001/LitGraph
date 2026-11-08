@@ -10,6 +10,8 @@ const files=asar.listPackage(archive).map(s=>s.replaceAll('\\','/').replace(/^\/
 const forbidden=files.filter(f=>!f.startsWith('node_modules/')&&/^(?:output|data|projects|release|\.codex|\.env)(?:\/|$)|(?:^|\/)(?:workspace-state\.json|model-config\.encrypted|credentials\.json|auth\.json|.*\.local\.json)$/.test(f));
 assert.deepEqual(forbidden,[]);assert.equal(JSON.parse(extract('package.json')).version,version);
 const corpus=JSON.parse(extract('dist/sample-fulltext/index.json'));assert.equal(corpus.documents.length,50);
+const bundleText=files.filter(f=>/^dist\/assets\/.*\.js$/.test(f)).map(extract).join('\n');
+for(const marker of ['sourceMetadataState','Retry bibliographic extraction','modelAttempt'])assert.ok(bundleText.includes(marker),'Metadata repair missing: '+marker);
 assert.ok(files.some(f=>f.includes('onnxruntime-node')&&f.includes('/darwin/'+arch+'/')),'Native ONNX runtime missing');
 const installer=`release/macos/LitGraph-${version}-macOS-${arch}.dmg`,bytes=await fs.readFile(installer),sha256=createHash('sha256').update(bytes).digest('hex');
 const report={version,arch,archiveEntries:files.length,forbidden,samplePapers:50,size:bytes.length,sha256,signing:'ad-hoc',notarized:false,commit:process.env.GITHUB_SHA};

@@ -18,7 +18,7 @@ const headers={Authorization:'Bearer '+token,Accept:'application/vnd.github+json
 async function api(url,options={}){const u=new URL(url);if(!['api.github.com','uploads.github.com'].includes(u.hostname))throw Error('Unexpected upload host');const r=await fetch(url,{...options,headers:{...headers,...options.headers},signal:AbortSignal.timeout(options.body instanceof Blob?600000:60000)});if(!r.ok)throw Error('GitHub HTTP '+r.status);return r.json();}
 const hash=async file=>createHash('sha256').update(await readFile(file)).digest('hex');
 const audit=JSON.parse(await readFile(`output/package-audit-${version}.json`,'utf8'));
-if(audit.sha256!==await hash(`release/${version}/${names[0]}`)||audit.samplePapers!==50||audit.forbidden.length)throw Error('Installer audit does not match');
+if(audit.version!==version||audit.commit!==commit||audit.sha256!==await hash(`release/${version}/${names[0]}`)||audit.samplePapers!==50||audit.forbidden.length)throw Error('Installer audit does not match');
 for(const arch of ['arm64']){
  const mac=JSON.parse(await readFile(`output/package-audit-macos-${arch}.json`,'utf8'));
  if(mac.version!==version||mac.arch!==arch||mac.commit!==commit||mac.samplePapers!==50||mac.forbidden.length||mac.sha256!==await hash(`release/${version}/LitGraph-${version}-macOS-${arch}.dmg`))throw Error('macOS audit/commit mismatch: '+arch);

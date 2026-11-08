@@ -1,11 +1,25 @@
-# 未发布源码更新 · 文献信息识别修复
+# LitGraph 1.3.2
 
-2026-11-08 · 此节记录源码修复；下方 1.3.1 安装包未因此替换。
+2026-11-08 · Windows 10 / 11 x64 · macOS 13+（仅 Apple Silicon M 系列）
+
+## Download for Windows
+
+[**Download for Windows**](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.2/LitGraph-Setup-1.3.2-x64.exe)
+
+## Download for macOS
+
+[**Download for macOS**](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.2/LitGraph-1.3.2-macOS-arm64.dmg)
+
+[SHA-256 校验和](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.2/SHA256SUMS.txt) · [官网直接下载](https://litgraph.aobi.qzz.io/#download)
 
 - **原文优先识别**：用文件名作为定位线索，在原文中确认真实标题后再匹配学术记录；支持中英文作者行、上标换行、双栏中作者先于标题、学位论文标签及可定位的截断文件名。
 - **防止串作者**：同页多篇文献先定位目标论文，排除上一篇的作者、栏目、导师及参考文献信息；模型引句必须属于目标区域，不能用部分作者覆盖已确认的完整作者列表。
 - **旧项目补全与单独重试**：升级元数据处理版本，打开旧项目时本地修复可确认字段，并同步项目存档；缺失字段保持“待确认”，可单独重新识别，无需重跑全文分析。按原文和模型区分识别缓存，网络/模型失败可重试，人工修改优先保留。
 - **测试**：增加合成失败案例及隔离桌面回归，覆盖新导入、旧数据迁移、双文献隔离、错误引用、人工修改、重启保存和中英文界面。规则无法可靠定位的材料仍需补充可读原文或人工核对；不承诺所有 PDF 格式都能自动识别。
+
+Windows 安装包未进行发布者签名；macOS 安装包为临时签名，尚未进行 Apple 公证。安装包只包含公共样例与离线模型，不包含开发者个人项目、聊天记录或接入密钥。
+
+---
 
 # LitGraph 1.3.1
 

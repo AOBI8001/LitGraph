@@ -2,7 +2,7 @@
 
 # LitGraph
 
-1.3.1 routes local facts, multi-paper comparisons, and collection overviews separately. Comparisons retrieve evidence independently for each paper-by-dimension cell. Available for Windows and Apple Silicon macOS. See [release notes](RELEASE_NOTES.md).
+1.3.2 fixes imported titles and authors, isolates preceding articles on shared pages, and adds legacy metadata repair and metadata-only retry. Available for Windows and Apple Silicon macOS. See [release notes](RELEASE_NOTES.md).
 
 _Connect the literature. Follow the evidence._
 
@@ -12,9 +12,9 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.3.1 · Windows 10 / 11 x64 · macOS 13+ (Apple Silicon M series) · MIT licensed**
+**1.3.2 · Windows 10 / 11 x64 · macOS 13+ (Apple Silicon M series) · MIT licensed**
 
-> Fixes sample index preparation and cross-turn evidence IDs. Sources display up to 24 original opening words, with `...` for longer excerpts; originals shorter than ten words are shown fully, never padded. Unknown citations are explicitly marked unverified, never mapped to unrelated sources. Version history lives in the [changelog](RELEASE_NOTES.md).
+> Bibliographic fields are grounded in the target source and exact scholarly records. Uncertain titles, authors and dates stay pending; manual edits are preserved. Metadata can be retried without rerunning paper analysis. Version history lives in the [changelog](RELEASE_NOTES.md).
 
 [Download for Windows](https://litgraph.aobi.qzz.io/downloads/windows) · [Download for macOS (Apple Silicon)](https://litgraph.aobi.qzz.io/downloads/macos) · [Website](https://litgraph.aobi.qzz.io/) · [GitHub fallback](https://github.com/AOBI8001/LitGraph/releases/latest) · [Feedback](https://github.com/AOBI8001/LitGraph/issues)
 
