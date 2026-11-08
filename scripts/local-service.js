@@ -8,6 +8,8 @@ import {loadSampleDocument} from '../src/sample-corpus.js';
 import {chunkDocument,CHUNK_VERSION} from '../src/research-evidence.js';
 import {createVectorService} from './rag-vector-service.mjs';
 import {cleanDoi,titleKey,discoveryCount,rankDiscovery,mergeDiscovery,usesInstitution,topicMatch} from '../src/discovery-contract.js';
+import {sanitizeBibliography} from '../src/pdf-bibliography.js';
+import {documentOcr} from './document-ocr.mjs';
 
 const digest = value => createHash('sha256').update(String(value)).digest('hex');
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -101,6 +103,7 @@ export function localService(root, dependencies = {}) {
   const embed=dependencies.embed || createVectorService(root,dataRoot);
   if(!dependencies.embed)embed.start?.();
   const scholarly=dependencies.scholarly||scholarlyService();
+  let ocrQueue=Promise.resolve();
   const engine=dependencies.engine || scansciService(root,{scholarly,download:dependencies.download});
   const acquiringDocuments = new Set();
   let acquisitionQueue=Promise.resolve();
@@ -393,7 +396,7 @@ export function localService(root, dependencies = {}) {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     const send = (code, obj) => { res.statusCode = code; res.end(JSON.stringify(obj)); };
     if(clearing)return send(409,{error:'Research data is being cleared; reload the application.'});
-    const mutating=req.method==='POST'&&/^\/__litgraph\/(?:document|project|acquire|discovery-history)(?:\?|$)/.test(req.url);if(mutating)activeMutations++;
+    const mutating=req.method==='POST'&&/^\/__litgraph\/(?:document|document-bibliography|project|acquire|discovery-history)(?:\?|$)/.test(req.url);if(mutating)activeMutations++;
     try {
       // Loopback only; never accept ambient cookies or cross-origin browser requests.
       if (!/^(127\.0\.0\.1|localhost):\d+$/.test(req.headers.host || '') || (req.headers.origin && req.headers.origin !== `http://${req.headers.host}`) || req.headers['sec-fetch-site'] === 'cross-site') return send(403, { error: '仅允许本机同源访问' });
@@ -536,13 +539,30 @@ export function localService(root, dependencies = {}) {
         if (!job) return send(404, { error: '任务已取消或失效' });
         return send(200, { state: job.state, result: job.result, error: job.error,partial:job.partial });
       }
+      if(url.pathname==='/__litgraph/document-ocr'&&req.method==='POST'){
+        const previous=ocrQueue;
+        let release;ocrQueue=new Promise(resolve=>{release=resolve;});
+        try{await previous;return send(200,await (dependencies.documentOcr||documentOcr)(root,data.image));}
+        finally{release();}
+      }
+      if(url.pathname==='/__litgraph/document-bibliography'&&req.method==='POST'){
+        if(!/^[a-f0-9]{64}$/.test(data.key||''))return send(400,{error:'Invalid bibliography record.'});
+        const record=await readDocument(data.key);if(!record)return send(404,{error:'Original document not found.'});
+        if(data.bibliography===undefined)return send(200,{bibliography:record.bibliography||null});
+        const bibliography=sanitizeBibliography(data.bibliography);
+        if(!bibliography)return send(400,{error:'Invalid bibliography record.'});
+        record.bibliography=bibliography;
+        await atomicWrite(path.join(folders.records,data.key+'.json'),JSON.stringify(record));
+        return send(200,{saved:true});
+      }
       if (url.pathname === '/__litgraph/document' && req.method === 'POST') {
         if (data.markdown || data.originalData) {
           const key=documentKey(data);
           const previous=await readDocument(key);
           let record = { ...previous, key, projectId: data.projectId, nodeId: data.nodeId, markdown: data.markdown ? String(data.markdown) : previous?.markdown, fileName: String(data.fileName || 'source.md'), sourceKind: data.sourceKind || 'markdown',conversionQuality:data.conversionQuality||'text_extraction',pageCount:data.pageCount||null };
+          if(data.bibliography)record.bibliography=sanitizeBibliography(data.bibliography);
           if(data.paperMetadata)record.paperMetadata={title:String(data.paperMetadata.title||'').slice(0,2000),authors:Array.isArray(data.paperMetadata.authors)?data.paperMetadata.authors.filter(x=>typeof x==='string').slice(0,200):[],year:data.paperMetadata.year,doi:String(data.paperMetadata.doi||'').slice(0,500)};
-          if(data.replaceOriginal===true && data.originalData){delete record.markdown;delete record.markdownRelativePath;delete record.localMarkdownPath;delete record.metadata;}
+          if(data.replaceOriginal===true && data.originalData){delete record.markdown;delete record.markdownRelativePath;delete record.localMarkdownPath;delete record.metadata;delete record.bibliography;}
           if(data.originalData)return send(200,await saveOriginal(key,Buffer.from(data.originalData,'base64'),record));
           return send(200, await saveDocument(record));
         }

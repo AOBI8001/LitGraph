@@ -1,6 +1,6 @@
 {
   "name": "litgraph",
-  "version": "1.3.2",
+  "version": "1.3.3-beta.1",
   "description": "Local-first literature visualization and evidence-grounded research workspace",
   "author": "LitGraph contributors",
   "main": "desktop/main.mjs",
@@ -26,7 +26,11 @@
     "appId": "org.litgraph.desktop",
     "productName": "LitGraph",
     "asar": true,
-    "asarUnpack": ["dist/models/**/*", "node_modules/onnxruntime-node/**/*"],
+    "asarUnpack": [
+      "dist/models/**/*",
+      "node_modules/onnxruntime-node/**/*",
+      "desktop/document-ocr.ps1"
+    ],
     "directories": {
       "output": "release",
       "buildResources": "output/build-resources"
@@ -35,6 +39,7 @@
       "dist/**/*",
       "desktop/**/*",
       "scripts/local-service.js",
+      "scripts/document-ocr.mjs",
       "scripts/rag-vector-service.mjs",
       "scripts/rag-vector-worker.mjs",
       "scripts/rag-index.mjs",
@@ -46,6 +51,8 @@
       "scripts/litgraph-mcp.mjs",
       "vendor/scansci/**/*",
       "src/discovery-contract.js",
+      "src/pdf-bibliography.js",
+      "src/pdf-text-quality.js",
       "src/sample-corpus.js",
       "src/research-evidence.js",
       "src/research-embedding.js",
@@ -66,7 +73,14 @@
       "artifactName": "LitGraph-Setup-${version}-${arch}.${ext}"
     },
     "mac": {
-      "target": [{"target":"dmg","arch":["arm64"]}],
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
       "category": "public.app-category.education",
       "minimumSystemVersion": "13.0.0",
       "icon": "src/assets/brand/litgraph-mark.png",

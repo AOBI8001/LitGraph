@@ -90,7 +90,7 @@ test('verified scholarly fields are preserved, while an empty remote author list
 test('truncated filenames still bind exact source prefix/suffix across wrapped titles',()=>{
   const source='亲子关系对儿童心理健康与\n行为发展的影响:一项追踪研究\n*\n张三\n1\n李四\n2\n测试大学\n摘要\n测试';
   const found=extractSourceMetadata(source,{fileName:'亲子关系对儿童心理健康...发展的影响_一项追踪研究_张三 (1).pdf'});
-  assert.equal(found.title,'亲子关系对儿童心理健康与 行为发展的影响:一项追踪研究');assert.deepEqual(found.authors,['张三','李四']);
+  assert.equal(found.title,'亲子关系对儿童心理健康与行为发展的影响:一项追踪研究');assert.deepEqual(found.authors,['张三','李四']);
 });
 test('an undecoded separator may split intact names, never reconstruct a missing name glyph',()=>{
   assert.deepEqual(extractSourceMetadata(md('张三 [unmapped PDF symbol] 李四'),node()).authors,['张三','李四']);

@@ -4,6 +4,8 @@ import { retrieveInWorker } from './research-worker-client.js';
 import { assessPdfTextQuality, readablePdfPage } from './pdf-text-quality.js';
 import { loadSampleDocument } from './sample-corpus.js';
 import {buildPaperCard,validPaperCard} from './research-card.js';
+import {bibliographyPage,bibliographyInfo,ocrBibliographyPage,PDF_BIBLIOGRAPHY_VERSION,BIBLIOGRAPHY_PAGES} from './pdf-bibliography.js';
+import {extractSourceMetadata} from './local-metadata.js';
 let dbPromise;
 const sourceCache = new Map();
 function database() {
@@ -22,28 +24,64 @@ async function storage(key, value) {
     tx.oncomplete = () => resolve(request.result); tx.onerror = () => reject(tx.error);
   });
 }
+async function loadPdf(bytes){
+  const pdfjs=await import('pdfjs-dist'),worker=await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+  pdfjs.GlobalWorkerOptions.workerSrc=worker.default;
+  const base=`${import.meta.env.BASE_URL}pdfjs/`;
+  return pdfjs.getDocument({data:new Uint8Array(bytes),isEvalSupported:false,cMapUrl:base+'cmaps/',cMapPacked:true,standardFontDataUrl:base+'standard_fonts/',wasmUrl:base+'wasm/'});
+}
+async function completeBibliography(pdf,bibliography,fileName,signal){
+  if(bibliography.ocr?.attempted)return;
+  const found=extractSourceMetadata('',{fileName},{bibliography});
+  if(found.title&&found.authors.length&&found.year)return;
+  const front=bibliography.pages.slice(0,3).flatMap(page=>page.lines.map(line=>line.text)).join('\n');
+  if(!/[\p{Script=Han}]/u.test(front)||!(/\[unmapped PDF symbol\]/.test(front)||/学\s*位\s*论\s*文/.test(front)))return;
+  bibliography.ocr={attempted:true,supported:false};bibliography.ocrPages=[];
+  for(let p=1;p<=Math.min(3,pdf.numPages);p++){
+    signal?.throwIfAborted();const page=await pdf.getPage(p),base=page.getViewport({scale:1}),viewport=page.getViewport({scale:Math.min(3,2400/Math.max(base.width,base.height))});
+    const canvas=document.createElement('canvas');canvas.width=Math.ceil(viewport.width);canvas.height=Math.ceil(viewport.height);
+    try{
+      await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+      const result=await localRequest('document-ocr',{image:canvas.toDataURL('image/png').split(',')[1]},{signal});
+      if(!result.supported)break;
+      bibliography.ocr.supported=true;
+      bibliography.ocrPages.push(ocrBibliographyPage(result.lines,canvas.width,canvas.height,p));
+      // Large logos/colored covers can make Windows OCR miss a small title.
+      // Retry its content area once, retaining the original image coordinates.
+      const ocrOnly=extractSourceMetadata('',{fileName},{bibliography:{...bibliography,pages:bibliography.ocrPages,ocrPages:undefined}});
+      if(p===1&&!ocrOnly.title&&/中\s*文\s*论\s*文\s*题\s*目/.test(front)){
+        const top=Math.round(canvas.height*.38),factor=Math.min(1.4,2400/Math.max(canvas.width,canvas.height-top)),crop=document.createElement('canvas');crop.width=Math.ceil(canvas.width*factor);crop.height=Math.ceil((canvas.height-top)*factor);
+        try{
+          crop.getContext('2d').drawImage(canvas,0,top,canvas.width,canvas.height-top,0,0,crop.width,crop.height);
+          const retry=await localRequest('document-ocr',{image:crop.toDataURL('image/png').split(',')[1]},{signal});
+          if(retry.supported)bibliography.ocrPages[0].lines.push(...ocrBibliographyPage(retry.lines.map(line=>({...line,x:line.x/factor,y:line.y/factor+top,width:line.width/factor,height:line.height/factor})),canvas.width,canvas.height,p).lines);
+        }finally{crop.width=crop.height=0;}
+      }
+      const repaired=extractSourceMetadata('',{fileName},{bibliography});
+      if(repaired.title&&repaired.authors.length&&repaired.year)break;
+    }finally{canvas.width=canvas.height=0;page.cleanup();}
+  }
+}
 export async function extractFile(file, { signal, onProgress } = {}) {
   signal?.throwIfAborted();
   if (file.size > 40 * 1024 * 1024) throw new Error('单个文档请小于 40 MB。');
   const ext = file.name.split('.').pop().toLowerCase();
   if (ext === 'pdf') {
-    const pdfjs = await import('pdfjs-dist');
-    const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-    pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-    const resourceBase = `${import.meta.env.BASE_URL}pdfjs/`;
-    const loadingTask = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false,
-      cMapUrl: resourceBase+'cmaps/', cMapPacked:true, standardFontDataUrl:resourceBase+'standard_fonts/', wasmUrl:resourceBase+'wasm/' });
+    const loadingTask = await loadPdf(await file.arrayBuffer());
     let markdown = `# ${file.name}\n`, characterCount = 0;
     const pageTexts=[];
+    const bibliography={version:PDF_BIBLIOGRAPHY_VERSION,pages:[]};
     let pageCount = 0;
     const abort = () => { void loadingTask.destroy().catch(() => {}); };
     signal?.addEventListener('abort', abort, { once: true });
     try {
       const pdf = await loadingTask.promise;
+      bibliography.info=bibliographyInfo(await pdf.getMetadata().catch(()=>({})));
       pageCount = pdf.numPages;
       for (let p = 1; p <= pdf.numPages; p++) {
         signal?.throwIfAborted();
         const page = await pdf.getPage(p), content = await page.getTextContent();
+        if(p<=BIBLIOGRAPHY_PAGES)bibliography.pages.push(bibliographyPage(page,content.items,p));
         let text = '', lastY;
         for (const item of content.items) {
           if (!('str' in item)) continue;
@@ -56,17 +94,45 @@ export async function extractFile(file, { signal, onProgress } = {}) {
         page.cleanup();
         onProgress?.(p, pdf.numPages);
       }
+      await completeBibliography(pdf,bibliography,file.name,signal);
     } finally { signal?.removeEventListener('abort', abort); await loadingTask.destroy(); }
-    if (characterCount < 40) throw Object.assign(new Error('PDF 没有足够的可提取文字，可能是扫描件。请先 OCR，再上传 PDF 或 MD。'),{permanent:true});
+    if (characterCount < 40) throw Object.assign(new Error('PDF 没有足够的可提取文字，可能是扫描件。请先 OCR，再上传 PDF 或 MD。'),{permanent:true,bibliography});
     const textQuality=assessPdfTextQuality(pageTexts);
-    if(!textQuality.usable)throw Object.assign(new Error('PDF 的文字编码异常，提取结果不可靠。原文已保留，请先 OCR 或补充可读的 PDF / MD 后继续。'),{permanent:true,code:'pdf_text_unreliable'});
+    if(!textQuality.usable)throw Object.assign(new Error('PDF 的文字编码异常，提取结果不可靠。原文已保留，请先 OCR 或补充可读的 PDF / MD 后继续。'),{permanent:true,code:'pdf_text_unreliable',bibliography});
     markdown += pageTexts.map((text,index)=>`\n## PDF Page ${index+1}\n\n${textQuality.uncertainPages.includes(index+1)?'> Extraction note: [unmapped PDF symbol] marks a glyph that could not be decoded. Do not infer missing operators or use affected expressions as numerical evidence; consult the original PDF.\n\n':''}${readablePdfPage(text.trim())}\n`).join('');
-    return { markdown, fileName: file.name.replace(/\.pdf$/i, '.md'), sourceKind: 'pdf_text', conversionQuality:'text_extraction', textQuality, pageCount, original: file };
+    return { markdown, fileName: file.name.replace(/\.pdf$/i, '.md'), sourceKind: 'pdf_text', conversionQuality:'text_extraction', textQuality, bibliography, pageCount, original: file };
   }
   if (!['md', 'txt', 'csv', 'json', 'tex'].includes(ext)) throw new Error('研究材料支持 PDF、MD、TXT、CSV、JSON、TeX。请先将其他格式转换为 PDF 或 MD。');
   const markdown = (await file.text()).replace(/\r\n/g, '\n').replace(/\u0000/g, '');
   if (!markdown.trim()) throw new Error('文件没有可读取的文字。');
   return { markdown, fileName: file.name, sourceKind: ext === 'md' ? 'markdown' : 'text', original: file };
+}
+
+// Repair old converted documents from the retained PDF without reconverting the
+// body, changing evidence line numbers, or rebuilding the vector index.
+export async function ensureBibliography(node,document,{signal}={}){
+  if(!document&&node?.importedLocally&&node.fulltextKey){
+    const saved=await localRequest('document-bibliography',{key:node.fulltextKey},{signal});
+    document={markdown:'',fileName:node.fileName,bibliography:saved?.bibliography||undefined};
+  }
+  if(!document||document.bibliography?.version===PDF_BIBLIOGRAPHY_VERSION||!node.importedLocally
+    ||!(node.hasPdf||node.originalRelativePath||/\.pdf$/i.test(node.fileName||'')))return document;
+  signal?.throwIfAborted();
+  const blob=await originalBlob(node);if(!blob)return document;
+  const task=await loadPdf(await blob.arrayBuffer()),abort=()=>{void task.destroy().catch(()=>{});};
+  signal?.addEventListener('abort',abort,{once:true});
+  try{
+    const pdf=await task.promise,bibliography={version:PDF_BIBLIOGRAPHY_VERSION,info:bibliographyInfo(await pdf.getMetadata().catch(()=>({}))),pages:[]};
+    for(let p=1;p<=Math.min(BIBLIOGRAPHY_PAGES,pdf.numPages);p++){
+      signal?.throwIfAborted();const page=await pdf.getPage(p),content=await page.getTextContent();
+      bibliography.pages.push(bibliographyPage(page,content.items,p));page.cleanup();
+    }
+    await completeBibliography(pdf,bibliography,node.fileName,signal);
+    document.bibliography=bibliography;
+    if(node.fulltextKey)await localRequest('document-bibliography',{key:node.fulltextKey,bibliography},{signal});
+    if(node.fulltextStorageKey){const cached=await storage(node.fulltextStorageKey).catch(()=>null);await storage(node.fulltextStorageKey,{...cached,...document}).catch(()=>{});}
+    return document;
+  }finally{signal?.removeEventListener('abort',abort);await task.destroy();}
 }
 // Commit the source before conversion. A failed worker must never lose the user's PDF.
 export async function saveOriginalFile(projectId, node, file) {

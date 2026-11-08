@@ -2,7 +2,7 @@
 
 # LitGraph
 
-1.3.2 fixes imported titles and authors, isolates preceding articles on shared pages, and adds legacy metadata repair and metadata-only retry. Available for Windows and Apple Silicon macOS. See [release notes](RELEASE_NOTES.md).
+1.3.3-beta.1 is a bibliographic extraction test build with PDF layout reconstruction, optional offline Windows cover OCR, and metadata saved during conversion. The current stable release is 1.3.2. See [release notes](RELEASE_NOTES.md) for scope and limitations.
 
 _Connect the literature. Follow the evidence._
 

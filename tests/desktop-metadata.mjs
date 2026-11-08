@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { emptyProject } from '../src/startup-project.js';
+import {SOURCE_METADATA_VERSION} from '../src/local-metadata.js';
 const root=process.cwd();await mkdir('output/desktop',{recursive:true});
 const dataDir=await mkdtemp(path.join(root,'output/desktop/metadata-'));
 const project=emptyProject('metadata-fixture');project.meta.title='Metadata regression';
@@ -26,7 +27,7 @@ try{
  const page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));
  await page.route('**/__litgraph/metadata',route=>{lookups.push(route.request().postDataJSON());return route.fulfill({json:{metadata:null}});});
  const state=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('litgraph.projects.v1'))['metadata-fixture'].data);
- await page.waitForFunction(()=>JSON.parse(localStorage.getItem('litgraph.projects.v1'))?.['metadata-fixture']?.data.nodes.every(n=>n.sourceMetadataVersion===2));
+ await page.waitForFunction(version=>JSON.parse(localStorage.getItem('litgraph.projects.v1'))?.['metadata-fixture']?.data.nodes.every(n=>n.sourceMetadataVersion===version),SOURCE_METADATA_VERSION);
  let saved=await state();
  assert.deepEqual(saved.nodes[0].authors,['张三','李四']);assert.equal(saved.nodes[0].year,2023);
  assert.deepEqual(saved.nodes[1].authors,['王五','赵六']);assert.ok(!saved.nodes[1].authors.includes('John Example'));

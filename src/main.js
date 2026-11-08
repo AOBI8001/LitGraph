@@ -30,10 +30,10 @@ import {buildPaperCard} from './research-card.js';
 import { ResearchRequest, formatResearchDuration } from './research-request.js';
 import {researchChatKey} from './research-scope.js';
 import { externalState, refreshExternal, externalInstructions, externalCompletion, localRequest, copyTextToClipboard } from './external-agent.js';
-import { extractFile, saveFulltext, saveOriginalFile, prepareEvidence, imageAttachment, withImages, originalBlob, getFulltext } from './fulltext.js';
+import { extractFile, saveFulltext, saveOriginalFile, prepareEvidence, imageAttachment, withImages, originalBlob, getFulltext, ensureBibliography } from './fulltext.js';
 import { HISTORY_KEY, restoreJobs, createImportJob, jobCounts, moveTab, processImportItem, processImportBatch, setImportCanvasVisibility } from './import-jobs.js';
 import { paperAnalysisMessages, validatePaperAnalysis } from './paper-analysis.js';
-import { extractSourceMetadata, applySourceMetadata, verifiedModelMetadata, metadataFrontmatter, shouldRepairSourceMetadata } from './local-metadata.js';
+import { extractSourceMetadata, applySourceMetadata, verifiedModelMetadata, metadataFrontmatter, shouldRepairSourceMetadata, applyScholarlyIdentity } from './local-metadata.js';
 import { repairSourceMetadata } from './source-metadata-repair.js';
 import { messageMarkdown } from './message-markdown.js';
 import { selectEvidence } from './research-evidence.js';
@@ -2581,8 +2581,8 @@ function renderInspector(node) {
     const projectId=currentProjectId,button=event.currentTarget;
     button.disabled=true;
     try{
-      const original=await getFulltext(node);
-      if(!original?.markdown)throw Error(panelText('请先补充可读取的原文。','Please add a readable original first.'));
+      const original=await ensureBibliography(node,await getFulltext(node));
+      if(!original?.markdown&&!original?.bibliography?.pages?.length)throw Error(panelText('请先补充可读取的原文。','Please add a readable original first.'));
       if(node.sourceMetadataState)delete node.sourceMetadataState.modelAttempt;
       await refreshLocalMetadata(node,original,new AbortController().signal);
       if(projectId!==currentProjectId||!nodes.includes(node))return;
@@ -3774,11 +3774,8 @@ async function lookupScholarlyMetadata({ doi = '', title = '' }) {
 
 function applyScholarlyMetadata(node, metadata) {
   if (!metadata) return node;
-  if (metadata.title && !node.metadataOverrides?.title) node.title = metadata.title;
-  if (metadata.year && !node.metadataOverrides?.year) node.year = metadata.year;
+  applyScholarlyIdentity(node,metadata);
   if (metadata.language && metadata.language!=='unknown') node.language = metadata.language;
-  if (metadata.authors?.length && !node.metadataOverrides?.authors) node.authors = metadata.authors;
-  if (metadata.doi && !node.metadataOverrides?.doi) node.doi = metadata.doi;
   if (metadata.abstract) {
     node.abstract = metadata.abstract;
     node.abstractSource = metadata.abstractSource || metadata.metadataSource || 'OpenAlex';
@@ -4296,6 +4293,7 @@ function saveImportProgress(job, node, item) {
 }
 async function refreshLocalMetadata(node, document, signal) {
   const projectId=currentProjectId;
+  document=await ensureBibliography(node,document,{signal});
   const config=activeAIConfig();
   await repairSourceMetadata(node,document,{
     signal,
@@ -4314,10 +4312,10 @@ async function repairProjectSourceMetadata() {
     if(currentProjectId!==projectId||nodes!==scope)return;
     if(!shouldRepairSourceMetadata(node))continue;
     try{
-      const original=await getFulltext(node);
+      const original=await ensureBibliography(node,await getFulltext(node));
       if(currentProjectId!==projectId||nodes!==scope)return;
-      if(!original?.markdown)continue;
-      applySourceMetadata(node,extractSourceMetadata(original.markdown,node));changed++;
+      if(!original?.markdown&&!original?.bibliography?.pages?.length)continue;
+      applySourceMetadata(node,extractSourceMetadata(original.markdown||'',node,original));changed++;
     }catch{/* A missing original must not block other records. */}
     if(changed&&changed%20===0){saveCurrentProject();await new Promise(resolve=>setTimeout(resolve,0));}
   }
@@ -4348,14 +4346,14 @@ async function analyzeOriginal(node, signal) {
   const analysisMessages=paperAnalysisMessages(node,text,peers,project.theories,answerLanguage);
   analysisMessages[0].content+=' Also return paperCard with researchQuestion, population, methods and findings fields. Each field is {"quote":"one exact contiguous substantive passage from original_excerpts"}; use null when not explicit. Keep each quote under 900 characters. Do not translate, infer or invent missing fields. These are source-backed cards, not additional prose summaries.';
   analysisMessages[0].content+=' Also return an optional bibliography object: {"title":{"value":"original title","quote":"exact title passage"},"authors":[{"name":"paper author, not supervisor","quote":"exact byline passage"}],"year":{"value":2024,"quote":"exact publication or thesis date passage"}}. Use only supplied frontmatter, not reference entries or grants/received dates. Omit uncertain fields. Do not infer citation counts. Quotes must be literal source passages.';
-  const analysisInput=JSON.parse(analysisMessages[1].content);analysisInput.frontmatter=metadataFrontmatter(document.markdown,node);analysisMessages[1].content=JSON.stringify(analysisInput);
+  const analysisInput=JSON.parse(analysisMessages[1].content);analysisInput.frontmatter=metadataFrontmatter(document.markdown,node,document);analysisMessages[1].content=JSON.stringify(analysisInput);
   const raw = await callAI(analysisMessages, activeAIConfig(), 5000,
     {json:true,researchMode:'quick',signal:AbortSignal.any([signal,AbortSignal.timeout(180000)])});
   signal.throwIfAborted();
   const result = validatePaperAnalysis(safeJsonFromModel(raw),text,peers);
   node.researchCard=buildPaperCard(node,document,result.paperCard);
   document.paperCard=node.researchCard;
-  applySourceMetadata(node,verifiedModelMetadata(result.bibliography,document.markdown,node));
+  applySourceMetadata(node,verifiedModelMetadata(result.bibliography,document.markdown,node,document));
   node.summary = result.summary.trim();
   node.summaryLanguage = answerLanguage;
   node.aiSummaryEn = answerLanguage === 'en' ? node.summary : '';
@@ -4471,13 +4469,25 @@ async function runImportJob(job, onlyNodeId = null) {
             if (!blob) throw Error(panelText('本地原文文件不可用，请补充原文。','Local original unavailable. Add the original file.'));
             const file = blob instanceof File ? blob : new File([blob],node.fileName||node.title.slice(0,100)+'.pdf',{type:'application/pdf'});
             let lastPageUpdate = 0;
-            originalDocument = await extractFile(file,{signal,onProgress:(page,total) => {
-              item.pages={done:page,total};
-              if (Date.now()-lastPageUpdate>400 || page===total) { lastPageUpdate=Date.now();renderLiteratureDiscoveryWindow(); }
-            }});
+            try{
+              originalDocument = await extractFile(file,{signal,onProgress:(page,total) => {
+                item.pages={done:page,total};
+                if (Date.now()-lastPageUpdate>400 || page===total) { lastPageUpdate=Date.now();renderLiteratureDiscoveryWindow(); }
+              }});
+            }catch(error){
+              // Bibliography and full-text readability are separate outcomes.
+              // Keep a verified cover even when the body still requires OCR.
+              if(error.bibliography){
+                applySourceMetadata(node,extractSourceMetadata('',node,{bibliography:error.bibliography}));
+                await localRequest('document-bibliography',{key:node.fulltextKey,bibliography:error.bibliography},{signal});
+              }
+              throw error;
+            }
             originalDocument.originalAlreadySaved=Boolean(node.originalRelativePath);
           }
           signal.throwIfAborted();
+          originalDocument=await ensureBibliography(node,originalDocument,{signal});
+          applySourceMetadata(node,extractSourceMetadata(originalDocument.markdown,node,originalDocument));
           await saveFulltext(job.projectId,node,originalDocument);
           if (node.fulltextPersistence !== 'disk') throw Error(panelText('MD 未保存到磁盘，请检查可用空间后继续。','Markdown was not saved to disk. Check storage and continue.'));
         },
