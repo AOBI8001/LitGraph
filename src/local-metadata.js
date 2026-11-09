@@ -62,6 +62,25 @@ function fileTitle(value) {
 export function metadataLookupIdentity(node) {
   return `${cleanDoi(node?.doi).toLowerCase()}|${identity(node?.title)}`;
 }
+// A descriptive filename can seed an exact catalogue lookup even when the PDF
+// text layer is damaged. It is a query, never proof of the returned identity.
+export function metadataLookupCandidate(node) {
+  if (node.doi || node.sourceMetadataEvidence?.title) return { doi: node.doi || '', title: node.title || '', fromFilename: false };
+  const title = fileTitle(node.fileName);
+  const author = String(node.fileName || '').match(/_\s*([\p{Script=Han}·]{2,5})(?:\s*\(\d+\))?\.(?:pdf|md|txt)$/u)?.[1];
+  if (!author || !plausibleTitle(title) || identity(title).length < 8 || /^[\da-f -]+$/i.test(title)) return null;
+  return { doi: '', title, authors: [author], fromFilename: true };
+}
+export function matchesMetadataCandidate(candidate, metadata) {
+  if (!metadata) return false;
+  if (candidate.doi) return cleanDoi(candidate.doi) === cleanDoi(metadata.doi);
+  if (identity(candidate.title) !== identity(metadata.title)) return false;
+  // A filename-only match must also agree on its explicitly named author.
+  return !candidate.fromFilename || candidate.authors.some(name => (metadata.authors || []).some(author => identity(author) === identity(name)));
+}
+export function metadataDocumentFingerprint(markdown, document) {
+  return sourceMetadataFingerprint(String(markdown || '') + '\n' + bibliographyText(document?.bibliography));
+}
 export function sourceMetadataFingerprint(markdown) {
   let hash = 2166136261;
   const text = String(markdown || '');
@@ -72,7 +91,8 @@ function sourceLines(markdown, document) {
   const lines = String(bibliographyText(document?.bibliography)||markdown || '').replace(/^# [^\n]+\.(?:pdf|md|txt)\s*\n/i, '')
     .split(/## PDF Page 9\b/)[0].slice(0, 64000).split('\n')
     .map(normalizeLine)
-    .filter(line => line && !/^## PDF Page\b|^> Extraction note:/i.test(line));
+    .filter(line => line && !/^## PDF Page\b|^> Extraction note:/i.test(line)
+      && !(titleLabel.test(line) && !line.replace(titleLabel,'').trim()));
   const references = lines.findIndex(line => /^(?:#{1,6}\s*)?(?:\d+[.)]?\s*)?(?:References|参考文献)\s*$/i.test(line));
   return references < 0 ? lines : lines.slice(0, references);
 }
@@ -153,7 +173,10 @@ function locatePaper(markdown, node = {}, document) {
     }
   }
   if(anchors.length)anchor=anchors.sort((a,b)=>{
-    const score=c=>{const byline=bylineAfter(lines,c.index+c.width);return (byline.names.length&&byline.confirmed?100:0)+(headers.has(lines[c.index])?20:0);};
+    // A duplicated thesis cover may contain a damaged copy of a name. Prefer a
+    // byline corroborated by the filename, but never turn its hint into proof.
+    const filenameAuthor=String(node.fileName||'').match(/_\s*([\p{Script=Han}·]{2,5})(?:\s*\(\d+\))?\.(?:pdf|md|txt)$/u)?.[1];
+    const score=c=>{const byline=bylineAfter(lines,c.index+c.width);return (byline.names.length&&byline.confirmed?100:0)+(headers.has(lines[c.index])?20:0)+(filenameAuthor&&byline.names.includes(filenameAuthor)?30:0);};
     return score(b)-score(a)||a.index-b.index;
   })[0];
   if (!anchor && !(node.openAlexId || node.metadataApiUrl || node.metadataRetrievedAt)) {

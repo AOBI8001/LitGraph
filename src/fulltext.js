@@ -94,11 +94,10 @@ export async function extractFile(file, { signal, onProgress } = {}) {
         page.cleanup();
         onProgress?.(p, pdf.numPages);
       }
-      await completeBibliography(pdf,bibliography,file.name,signal);
     } finally { signal?.removeEventListener('abort', abort); await loadingTask.destroy(); }
-    if (characterCount < 40) throw Object.assign(new Error('PDF 没有足够的可提取文字，可能是扫描件。请先 OCR，再上传 PDF 或 MD。'),{permanent:true,bibliography});
+    if (characterCount < 40) throw Object.assign(new Error('PDF 没有足够的可提取文字，原文已保留。请补充文字版 PDF / MD；扫描件也可先 OCR 后导入。'),{permanent:true,bibliography});
     const textQuality=assessPdfTextQuality(pageTexts);
-    if(!textQuality.usable)throw Object.assign(new Error('PDF 的文字编码异常，提取结果不可靠。原文已保留，请先 OCR 或补充可读的 PDF / MD 后继续。'),{permanent:true,code:'pdf_text_unreliable',bibliography});
+    if(!textQuality.usable)throw Object.assign(new Error('PDF 的文字编码异常，提取结果不可靠。原文已保留，请补充可读的 PDF / MD；也可先 OCR 后导入。'),{permanent:true,code:'pdf_text_unreliable',bibliography});
     markdown += pageTexts.map((text,index)=>`\n## PDF Page ${index+1}\n\n${textQuality.uncertainPages.includes(index+1)?'> Extraction note: [unmapped PDF symbol] marks a glyph that could not be decoded. Do not infer missing operators or use affected expressions as numerical evidence; consult the original PDF.\n\n':''}${readablePdfPage(text.trim())}\n`).join('');
     return { markdown, fileName: file.name.replace(/\.pdf$/i, '.md'), sourceKind: 'pdf_text', conversionQuality:'text_extraction', textQuality, bibliography, pageCount, original: file };
   }
@@ -127,9 +126,23 @@ export async function ensureBibliography(node,document,{signal}={}){
       signal?.throwIfAborted();const page=await pdf.getPage(p),content=await page.getTextContent();
       bibliography.pages.push(bibliographyPage(page,content.items,p));page.cleanup();
     }
-    await completeBibliography(pdf,bibliography,node.fileName,signal);
     document.bibliography=bibliography;
     if(node.fulltextKey)await localRequest('document-bibliography',{key:node.fulltextKey,bibliography},{signal});
+    if(node.fulltextStorageKey){const cached=await storage(node.fulltextStorageKey).catch(()=>null);await storage(node.fulltextStorageKey,{...cached,...document}).catch(()=>{});}
+    return document;
+  }finally{signal?.removeEventListener('abort',abort);await task.destroy();}
+}
+// Explicit opt-in only. The normal import and repair paths use native text,
+// exact scholarly lookup and the configured text model before suggesting OCR.
+export async function optionalBibliographyOcr(node,document,{signal}={}){
+  document=await ensureBibliography(node,document,{signal});
+  if(!document?.bibliography||document.bibliography.ocr?.attempted)return document;
+  const blob=await originalBlob(node);if(!blob)return document;
+  const task=await loadPdf(await blob.arrayBuffer()),abort=()=>{void task.destroy().catch(()=>{});};
+  signal?.addEventListener('abort',abort,{once:true});
+  try{
+    await completeBibliography(await task.promise,document.bibliography,node.fileName,signal);
+    if(node.fulltextKey)await localRequest('document-bibliography',{key:node.fulltextKey,bibliography:document.bibliography},{signal});
     if(node.fulltextStorageKey){const cached=await storage(node.fulltextStorageKey).catch(()=>null);await storage(node.fulltextStorageKey,{...cached,...document}).catch(()=>{});}
     return document;
   }finally{signal?.removeEventListener('abort',abort);await task.destroy();}

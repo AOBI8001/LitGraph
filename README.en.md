@@ -2,7 +2,7 @@
 
 # LitGraph
 
-1.3.3-beta.1 is a bibliographic extraction test build with PDF layout reconstruction, optional offline Windows cover OCR, and metadata saved during conversion. The current stable release is 1.3.2. See [release notes](RELEASE_NOTES.md) for scope and limitations.
+1.3.3-beta.1 is a bibliographic extraction test build prioritizing native PDF layout, exact scholarly records and evidence-validated text-model extraction. Metadata is saved independently during import; no vision model is required. Windows cover OCR is an explicit, optional fallback. The current stable release is 1.3.2. See [release notes](RELEASE_NOTES.md) for scope and limitations.
 
 _Connect the literature. Follow the evidence._
 

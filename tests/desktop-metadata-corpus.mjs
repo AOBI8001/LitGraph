@@ -14,11 +14,11 @@ await mkdir('output/desktop',{recursive:true});const dataDir=await mkdtemp(path.
 const env={...process.env,LITGRAPH_TEST_MODE:'1',LITGRAPH_TEST_DATA:dataDir};delete env.ELECTRON_RUN_AS_NODE;
 const normalize=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]/gu,'');
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
-let app;const errors=[];const started=Date.now();
+let app;const errors=[],ocrRequests=[];const started=Date.now();
 try{
  const executablePath=process.env.LITGRAPH_TEST_EXECUTABLE||path.join(process.cwd(),'node_modules/electron/dist/electron.exe');
  app=await electron.launch({executablePath,args:process.env.LITGRAPH_TEST_EXECUTABLE?[]:[process.cwd()],env,timeout:60000});
- const page=await app.firstWindow();page.on('pageerror',error=>errors.push(error.message));await page.locator('#empty-sample-project').waitFor();
+ const page=await app.firstWindow();page.on('pageerror',error=>errors.push(error.message));page.on('request',request=>{if(request.url().includes('/document-ocr'))ocrRequests.push(request.url());});await page.locator('#empty-sample-project').waitFor();
  if(process.env.LITGRAPH_METADATA_ONLINE!=='1')await page.route('**/__litgraph/metadata',route=>route.fulfill({json:{metadata:null}}));
  await page.locator('#add-papers-button').click();await page.locator('#document-input').setInputFiles(files);await page.locator('#start-paper-import').click();
  await page.waitForFunction(count=>JSON.parse(localStorage.getItem('litgraph.discoveryHistory.v1')||'[]').some(job=>job.items.length===count&&job.status!=='running'),files.length,{timeout:480000});
@@ -34,8 +34,8 @@ try{
   results.push({file:node.fileName,title:node.title,authors:node.authors,year:node.year,doi:node.doi,missing:node.sourceMetadataState?.missing,
    converted:Boolean(node.markdownRelativePath),analysisStatus:node.analysisStatus,error:node.processingError,matches});
  }
- assert.deepEqual(errors,[]);
- const report={dataDir,onlineScholarlyMetadata:process.env.LITGRAPH_METADATA_ONLINE==='1',count:files.length,elapsedMs:Date.now()-started,
+ assert.deepEqual(errors,[]);assert.deepEqual(ocrRequests,[],'default import must never invoke OCR');
+ const report={dataDir,onlineScholarlyMetadata:process.env.LITGRAPH_METADATA_ONLINE==='1',count:files.length,elapsedMs:Date.now()-started,ocrCalls:ocrRequests.length,
   bibliographicFieldsComplete:results.filter(r=>r.missing?.length===0).length,converted:results.filter(r=>r.converted).length,
   verifiedAgainstLabels:expected?results.filter(r=>Object.values(r.matches).every(Boolean)).length:null,results};
  await writeFile(path.join(dataDir,'metadata-audit.json'),JSON.stringify(report,null,2));console.log(JSON.stringify(report));

@@ -16,7 +16,7 @@ test('metadata service failure preserves verified local fields and remains retry
   const n=node();
   await repairSourceMetadata(n,document,{lookup:async()=>{throw Error('network unavailable');},applyRemote});
   assert.deepEqual(n.authors,['张三','李四']);assert.equal(n.year,null);assert.match(n.metadataWarning,/network unavailable/);assert.equal(n.sourceMetadataState.status,'incomplete');
-  let calls=0;await repairSourceMetadata(n,document,{lookup:async()=>{calls++;return {year:2023,metadataApiUrl:'https://example.org/verified'};},applyRemote});
+  let calls=0;await repairSourceMetadata(n,document,{lookup:async()=>{calls++;return {title,year:2023,metadataApiUrl:'https://example.org/verified'};},applyRemote});
   assert.equal(calls,1);assert.equal(n.year,2023);
 });
 test('model metadata is isolated, bounded to target, and cached for identical source',async()=>{
@@ -54,4 +54,34 @@ test('changing API/model retries unresolved metadata without storing credentials
   await repairSourceMetadata(n,doc,{model,modelIdentity:'api/model-a'});
   await repairSourceMetadata(n,doc,{model,modelIdentity:'api/model-b'});
   assert.equal(calls,2);assert.ok(!n.sourceMetadataState.modelAttempt.includes('model-b'));
+});
+
+test('year-only fallback uses the text model after exact scholarly lookup',async()=>{
+  const n=node(),doc={markdown:`${title}\n张三，李四\n测试大学\nVersion of record: 2022\nAbstract\nSynthetic body`},order=[];
+  await repairSourceMetadata(n,doc,{lookup:async()=>{order.push('lookup');return null;},applyRemote,model:async()=>{order.push('text-model');return {year:{value:2022,quote:'Version of record: 2022'}};}});
+  assert.deepEqual(order,['lookup','text-model']);assert.equal(n.year,2022);assert.equal(n.sourceMetadataState.status,'complete');
+});
+
+test('descriptive filename lookup requires exact title AND matching named author',async()=>{
+  const make=()=>({title:'合成决策任务的实验研究 张三',fileName:'合成决策任务的实验研究_张三.pdf',importedLocally:true,authors:[]});
+  const doc={markdown:'Unreadable or damaged cover text'};
+  const n=make();let query;
+  await repairSourceMetadata(n,doc,{lookup:async input=>{query=input;return {title:'合成决策任务的实验研究',authors:['张三'],year:2023,metadataApiUrl:'https://example.org/exact'};},applyRemote});
+  assert.equal(query.title,'合成决策任务的实验研究');assert.equal(n.sourceMetadataState.status,'complete');
+  for(const wrong of [{title:'合成决策任务的实验研究',authors:['李四']},{title:'合成决策任务的其他研究',authors:['张三']}]){
+    const n=make();await repairSourceMetadata(n,doc,{lookup:async()=>({...wrong,year:2023}),applyRemote});assert.deepEqual(n.authors,[]);assert.equal(n.year,null);
+  }
+  await repairSourceMetadata({title:'1234567',fileName:'1234567.pdf',importedLocally:true},doc,{lookup:()=>assert.fail('numeric filename is not a scholarly title')});
+});
+
+test('new PDF layout invalidates the text-model cache even if Markdown did not change',async()=>{
+  const n=node(),make=text=>({markdown:'same original body',bibliography:{version:1,pages:[{page:1,lines:[{text:title},{text:'Authors: undecoded'},{text},{text:'Abstract'}]}]}});let calls=0;
+  const model=async()=>{calls++;return {authors:[]};};
+  await repairSourceMetadata(n,make('version one'),{model});await repairSourceMetadata(n,make('version two'),{model});assert.equal(calls,2);
+});
+
+test('no-match lookups are cached, transient failures are not, explicit retry may clear the cache',async()=>{
+  const n=node();let calls=0;const lookup=async()=>{calls++;return null;};
+  await repairSourceMetadata(n,document,{lookup,applyRemote});await repairSourceMetadata(n,document,{lookup,applyRemote});assert.equal(calls,1);
+  delete n.sourceMetadataState.lookupAttempt;await repairSourceMetadata(n,document,{lookup,applyRemote});assert.equal(calls,2);
 });

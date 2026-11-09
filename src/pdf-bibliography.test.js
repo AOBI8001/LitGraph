@@ -40,6 +40,18 @@ test('Chinese student titles and spaced names do not become affiliations or merg
  const result=extractSourceMetadata(`${title}\n张银花  李  红  吴  寅\n测试大学\n摘要\n合成材料`,{fileName:title+'_张银花.pdf'});assert.equal(result.title,title);assert.deepEqual(result.authors,['张银花','李红','吴寅']);}
 });
 
+test('a side-column thesis title label cannot interrupt its multiline value',()=>{
+ const title='大学生合成判断与学习能力的调查研究',d=doc([row('大学生合成判断与',700,18),row('论文题目',680,10,20),row('学习能力的调查研究',680,18,190),row('作者姓名',630,12),row('王聪',630,16,250),row('测试大学',600,12),row('2023 年 6 月',100,12)]);
+ const result=extractSourceMetadata(d.markdown,{fileName:title+'_王聪.pdf'},d);assert.equal(result.title,title);assert.deepEqual(result.authors,['王聪']);assert.equal(result.year,2023);
+});
+
+test('repeated thesis covers prefer the source byline corroborated by the filename',()=>{
+ const title='大学生合成判断与学习能力的调查研究';
+ const d=doc([row(title,700,20),row('作者姓名',630,12),row('王丛',630,16,250),row('测试大学',600,12)]);
+ d.bibliography.pages.push({...page([row(title,700,20),row('作者姓名',630,12),row('王聪',630,16,250),row('测试大学',600,12)]),page:2});
+ const result=extractSourceMetadata(d.markdown,{fileName:title+'_王聪.pdf'},d);assert.deepEqual(result.authors,['王聪']);assert.match(result.evidence.authors,/王聪/);
+});
+
 test('separate thesis author label, punctuation and value exclude supervisors and signatures',()=>{
  const d=doc([row('合成知觉判断任务的实验研究',700,20),row('作 者 姓 名',600,16),row(':',580),row('王 聪',560,16),row('指导教师：李四',520,16),row('2013 年 5 月',100,16)]);
  const result=extractSourceMetadata(d.markdown,{fileName:'合成知觉判断任务的实验研究_王聪.pdf'},d);assert.deepEqual(result.authors,['王聪']);assert.equal(result.year,2013);

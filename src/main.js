@@ -30,7 +30,7 @@ import {buildPaperCard} from './research-card.js';
 import { ResearchRequest, formatResearchDuration } from './research-request.js';
 import {researchChatKey} from './research-scope.js';
 import { externalState, refreshExternal, externalInstructions, externalCompletion, localRequest, copyTextToClipboard } from './external-agent.js';
-import { extractFile, saveFulltext, saveOriginalFile, prepareEvidence, imageAttachment, withImages, originalBlob, getFulltext, ensureBibliography } from './fulltext.js';
+import { extractFile, saveFulltext, saveOriginalFile, prepareEvidence, imageAttachment, withImages, originalBlob, getFulltext, ensureBibliography, optionalBibliographyOcr } from './fulltext.js';
 import { HISTORY_KEY, restoreJobs, createImportJob, jobCounts, moveTab, processImportItem, processImportBatch, setImportCanvasVisibility } from './import-jobs.js';
 import { paperAnalysisMessages, validatePaperAnalysis } from './paper-analysis.js';
 import { extractSourceMetadata, applySourceMetadata, verifiedModelMetadata, metadataFrontmatter, shouldRepairSourceMetadata, applyScholarlyIdentity } from './local-metadata.js';
@@ -2548,6 +2548,7 @@ function renderInspector(node) {
       <h2><button id="paper-title-link" type="button">${escapeHtml(node.title)}</button></h2>
       <p class="paper-authors">${escapeHtml((node.authors || []).join(', ') || panelText('作者待确认', 'Author pending confirmation'))}</p>
       ${node.sourceMetadataState?.missing?.length ? `<p class="paper-metadata-status paper-fulltext-status" role="status">${panelText('文献信息待确认：','Bibliographic fields pending: ')}${escapeHtml(node.sourceMetadataState.missing.map(field=>({title:panelText('标题','title'),authors:panelText('作者','authors'),year:panelText('年份','year')})[field]).join('、'))}</p><button id="repair-paper-metadata" class="paper-process-action" type="button" ${discoveryImporting || discoverySearching ? 'disabled' : ''}>${panelText('重新识别文献信息','Retry bibliographic extraction')}</button>` : ''}
+      ${node.sourceMetadataState?.missing?.length && node.importedLocally && node.hasPdf && desktop && /Windows/i.test(navigator.userAgent) ? `<button id="ocr-paper-metadata" class="paper-process-action" type="button" title="${panelText('可选操作，仅在本机识别封面；无需视觉模型，不转换整篇正文。','Optional local cover recognition; no vision model required. Does not convert the full body.')}" ${discoveryImporting || discoverySearching ? 'disabled' : ''}>${panelText('可选：本机 OCR 核对封面','Optional: local cover OCR')}</button>` : ''}
       <a class="paper-doi" href="${escapeHtml(paperSource(node))}" target="_blank" rel="noreferrer">${escapeHtml(node.doi || node.url || panelText('无 DOI / URL', 'No DOI / URL'))}</a>
       <div class="paper-actions">
         <button id="open-pdf-button" type="button" ${node.sampleMarkdown && !node.hasPdf && !node.originalRelativePath ? `disabled title="${panelText('样例仅附带 MD，未附带 PDF', 'Sample includes Markdown, not PDF')}"` : ''}><span class="action-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65"><path d="M7 3.5h7l3 3V20H7z"/><path d="M14 3.5V7h3M10 11h4M10 14h4"/></svg></span><b>${panelText('原文', 'Full text')}</b></button>
@@ -2577,13 +2578,14 @@ function renderInspector(node) {
   document.querySelector('#paper-title-link').addEventListener('click', () => openPaper(node));
   document.querySelector('#open-pdf-button').addEventListener('click', () => openPaper(node));
   document.querySelector('#process-paper-button')?.addEventListener('click', () => void processSinglePaper(node));
-  document.querySelector('#repair-paper-metadata')?.addEventListener('click', async(event) => {
+  for(const selector of ['#repair-paper-metadata','#ocr-paper-metadata'])document.querySelector(selector)?.addEventListener('click', async(event) => {
     const projectId=currentProjectId,button=event.currentTarget;
     button.disabled=true;
     try{
-      const original=await ensureBibliography(node,await getFulltext(node));
+      let original=await ensureBibliography(node,await getFulltext(node));
       if(!original?.markdown&&!original?.bibliography?.pages?.length)throw Error(panelText('请先补充可读取的原文。','Please add a readable original first.'));
-      if(node.sourceMetadataState)delete node.sourceMetadataState.modelAttempt;
+      if(selector==='#ocr-paper-metadata')original=await optionalBibliographyOcr(node,original);
+      if(node.sourceMetadataState){delete node.sourceMetadataState.modelAttempt;delete node.sourceMetadataState.lookupAttempt;}
       await refreshLocalMetadata(node,original,new AbortController().signal);
       if(projectId!==currentProjectId||!nodes.includes(node))return;
       saveCurrentProject();
@@ -4476,10 +4478,11 @@ async function runImportJob(job, onlyNodeId = null) {
               }});
             }catch(error){
               // Bibliography and full-text readability are separate outcomes.
-              // Keep a verified cover even when the body still requires OCR.
+              // Metadata lookup/text extraction still runs if body conversion
+              // failed; it never needs a vision-capable model.
               if(error.bibliography){
-                applySourceMetadata(node,extractSourceMetadata('',node,{bibliography:error.bibliography}));
                 await localRequest('document-bibliography',{key:node.fulltextKey,bibliography:error.bibliography},{signal});
+                await refreshLocalMetadata(node,{markdown:'',bibliography:error.bibliography},signal);
               }
               throw error;
             }
@@ -4490,6 +4493,7 @@ async function runImportJob(job, onlyNodeId = null) {
           applySourceMetadata(node,extractSourceMetadata(originalDocument.markdown,node,originalDocument));
           await saveFulltext(job.projectId,node,originalDocument);
           if (node.fulltextPersistence !== 'disk') throw Error(panelText('MD 未保存到磁盘，请检查可用空间后继续。','Markdown was not saved to disk. Check storage and continue.'));
+          await refreshLocalMetadata(node,originalDocument,signal);
         },
         analyze: () => analyzeOriginal(node,signal)
       },signal,{stages});
