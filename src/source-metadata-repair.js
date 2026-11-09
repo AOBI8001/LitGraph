@@ -45,12 +45,14 @@ export async function repairSourceMetadata(node, document, { lookup, applyRemote
   await matchRemote();
   const state = node.sourceMetadataState;
   const needsModel = state.missing.length > 0;
-  const attemptedSource = `${SOURCE_METADATA_VERSION}:${metadataDocumentFingerprint(markdown, document)}:${sourceMetadataFingerprint(modelIdentity)}`;
+  const messages = bibliographyMessages(node, markdown, document);
+  const attemptedSource = `${SOURCE_METADATA_VERSION}:${metadataDocumentFingerprint(markdown, document)}:${sourceMetadataFingerprint(JSON.stringify(messages))}:${sourceMetadataFingerprint(modelIdentity)}`;
   if (model && needsModel && !state.ambiguous && metadataFrontmatter(markdown, node,document)
     && state.modelAttempt !== attemptedSource) {
     try {
-      const candidate = await model(bibliographyMessages(node, markdown,document), signal);
+      const candidate = await model(messages, signal);
       signal?.throwIfAborted();
+      if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) throw Error('The model did not return bibliographic JSON. / 模型未返回文献信息 JSON，请重试。');
       applySourceMetadata(node, verifiedModelMetadata(candidate, markdown, node,document));
       node.sourceMetadataState.modelAttempt = attemptedSource;
       delete node.sourceMetadataState.modelError;

@@ -85,3 +85,9 @@ test('no-match lookups are cached, transient failures are not, explicit retry ma
   await repairSourceMetadata(n,document,{lookup,applyRemote});await repairSourceMetadata(n,document,{lookup,applyRemote});assert.equal(calls,1);
   delete n.sourceMetadataState.lookupAttempt;await repairSourceMetadata(n,document,{lookup,applyRemote});assert.equal(calls,2);
 });
+
+test('unparseable model output is retryable instead of cached as an empty valid result',async()=>{
+  const n=node(),doc={markdown:`${title}\nAuthors: undecoded\nAbstract\nSynthetic body`};let calls=0;
+  const model=async()=>{calls++;return null;};await repairSourceMetadata(n,doc,{model});await repairSourceMetadata(n,doc,{model});
+  assert.equal(calls,2);assert.equal(n.sourceMetadataState.modelAttempt,undefined);assert.match(n.sourceMetadataState.modelError,/bibliographic JSON/);
+});
