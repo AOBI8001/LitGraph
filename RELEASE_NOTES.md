@@ -1,12 +1,22 @@
-# LitGraph 1.3.3-beta.1
+# LitGraph 1.3.3
 
-2026-11-09 · 本地测试版，正式下载入口仍为 1.3.2。
+2026-11-09 · Windows 10 / 11 x64 · macOS 13+（仅 Apple Silicon M 系列）
+
+## Download for Windows
+
+[**Download for Windows**](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.3/LitGraph-Setup-1.3.3-x64.exe)
+
+## Download for macOS
+
+[**Download for macOS**](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.3/LitGraph-1.3.3-macOS-arm64.dmg)
+
+[SHA-256 校验和](https://github.com/AOBI8001/LitGraph/releases/download/v1.3.3/SHA256SUMS.txt) · [官网直接下载](https://litgraph.aobi.qzz.io/#download)
 
 - **PDF 版面识别**：在不改动 RAG 原文行序的前提下，单独保存前 8 页的文字位置和字号；支持作者先于标题、交错的作者单位、重复绘制的粗体、资料库封面及跨行标题。
 - **字段单独核验**：修正发表年、卷期、页码和正文年份的混淆；保留原文语言和人工修改，学术服务中的译名、罗马化姓名作为别名保存。缺失字段不再因标题尚未定位而跳过有依据的模型补全。
 - **不依赖视觉模型**：默认按原生文字与版面、精确学术记录、纯文本字段补全的顺序执行。描述性文件名可提供查询线索，但必须同时核对完整标题与作者；文字和版面更新后可重试，重复的无结果查询会复用缓存。
 - **导入与旧数据修复**：文献信息在 MD 转换阶段保存，模型鉴权失败或暂停分析也不丢失；旧项目从保留的 PDF 补读版面，无需重建全文向量索引。全文不可读时仍可单独保留封面中已确认的信息。
-- **可选 OCR 补救**：默认导入、启动修复和重新识别均不自动调用 OCR。Windows 安装了系统识别语言时，可由用户主动选择本机封面 OCR，最多前 3 页；图像在本机处理。此功能不能代替整篇扫描件的 OCR；macOS 本测试版不提供同等 OCR 后备能力。
+- **可选 OCR 补救**：默认导入、启动修复和重新识别均不自动调用 OCR。Windows 安装了系统识别语言时，可由用户主动选择本机封面 OCR，最多前 3 页；图像在本机处理。此功能不能代替整篇扫描件的 OCR；macOS 当前版本不提供同等 OCR 后备能力。
 - **验证范围**：使用用户提供的 4 篇和 33 篇 PDF 验证，同时增加合成回归，检查新导入、旧数据迁移、日期和作者排除、元数据单独保存、人工修改、缓存及中英文界面。仍无法确认的信息明确保留为待确认，不宣称任意 PDF 均可全自动识别。
 
 ---

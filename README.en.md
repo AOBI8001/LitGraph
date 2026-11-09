@@ -2,7 +2,7 @@
 
 # LitGraph
 
-1.3.3-beta.1 is a bibliographic extraction test build prioritizing native PDF layout, exact scholarly records and evidence-validated text-model extraction. Metadata is saved independently during import; no vision model is required. Windows cover OCR is an explicit, optional fallback. The current stable release is 1.3.2. See [release notes](RELEASE_NOTES.md) for scope and limitations.
+1.3.3 improves bibliographic extraction with native PDF layout, exact scholarly records and evidence-validated text-model extraction. Metadata is saved independently during import; no vision model is required. Windows cover OCR is an explicit, optional fallback. See [release notes](RELEASE_NOTES.md) for scope and limitations.
 
 _Connect the literature. Follow the evidence._
 
@@ -12,7 +12,7 @@ LitGraph is a desktop workspace for literature reviews, theoretical comparison, 
 
 See the relationships in the graph. Investigate them in conversation. Your papers and research materials stay on your device, while AI comes from your chosen model API or an external Agent connected through MCP.
 
-**1.3.2 · Windows 10 / 11 x64 · macOS 13+ (Apple Silicon M series) · MIT licensed**
+**1.3.3 · Windows 10 / 11 x64 · macOS 13+ (Apple Silicon M series) · MIT licensed**
 
 > Bibliographic fields are grounded in the target source and exact scholarly records. Uncertain titles, authors and dates stay pending; manual edits are preserved. Metadata can be retried without rerunning paper analysis. Version history lives in the [changelog](RELEASE_NOTES.md).
 
